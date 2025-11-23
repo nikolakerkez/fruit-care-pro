@@ -1,0 +1,2 @@
+/Volumes/Macintosh HD - Data/development/projects/bb_agro_portal/android/app/.cxx/RelWithDebInfo/193l6p4l/arm64-v8a/CMakeFiles/edit_cache.dir
+/Volumes/Macintosh HD - Data/development/projects/bb_agro_portal/android/app/.cxx/RelWithDebInfo/193l6p4l/arm64-v8a/CMakeFiles/rebuild_cache.dir

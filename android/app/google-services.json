@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "443103224820",
+    "project_id": "bb-agro-portal",
+    "storage_bucket": "bb-agro-portal.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:443103224820:android:9c1a2f76c77341f88ecfa1",
+        "android_client_info": {
+          "package_name": "com.example.bb_agro_portal"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCH8msBo1BY5fIIfAf3CETtj2l6CVRN6JI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
