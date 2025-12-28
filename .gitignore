@@ -11,25 +11,17 @@ build/
 ios/Pods/
 ios/.symlinks/
 ios/build/
-ios/Flutter/App.framework
-ios/Flutter/Flutter.framework
+ios/Flutter/
 *.pbxuser
-*.mode1v3
-*.mode2v3
-*.perspectivev3
 *.xcuserstate
 *.xcworkspace/xcuserdata
 .DS_Store
 
 # Android
 android/app/build/
-android/app/debug
-android/app/profile
-android/app/release
 android/.gradle/
 android/captures/
 android/local.properties
-android/.idea/
 android/**/*.iml
 android/**/*.apk
 android/**/*.so
@@ -46,6 +38,5 @@ functions/node_modules/
 .vscode/
 .idea/
 
-# Misc
 *.log
 .env
