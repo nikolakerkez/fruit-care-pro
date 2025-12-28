@@ -9,7 +9,7 @@ workflows:
       groups:
         - appstore_credentials
       ios_signing:
-        distribution_type: development
+        distribution_type: app_store
         bundle_identifier: rs.nikolakerkez.fruitcarepro
       vars:
         XCODE_WORKSPACE: "ios/Runner.xcworkspace"
