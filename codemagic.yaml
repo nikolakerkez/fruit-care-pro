@@ -1,20 +1,26 @@
 workflows:
   ios-workflow:
     name: iOS TestFlight
-    instance_type: mac_mini_m2
     max_build_duration: 60
+    instance_type: mac_mini_m2
     integrations:
       app_store_connect: codemagic
     environment:
       ios_signing:
-        distribution_type: app_store
+        distribution_type: development
         bundle_identifier: rs.nikolakerkez.fruitcarepro
+      vars:
+        XCODE_WORKSPACE: "ios/Runner.xcworkspace"
+        XCODE_SCHEME: "Runner"
       flutter: stable
       xcode: latest
       cocoapods: default
     scripts:
       - name: Set up code signing
         script: xcode-project use-profiles
+      
+      - name: Get Flutter packages
+        script: flutter pub get
       
       - name: Fix iOS deployment target
         script: |
@@ -23,10 +29,7 @@ workflows:
           sed -i.bak 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9][0-9]*\.[0-9]/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' Runner.xcodeproj/project.pbxproj
           cd ..
       
-      - name: Get Flutter packages
-        script: flutter pub get
-      
-      - name: Fix Podfile post_install
+      - name: Add Podfile post_install hook
         script: |
           cat >> ios/Podfile << 'PODFILE_END'
           
@@ -42,20 +45,28 @@ workflows:
           end
           PODFILE_END
       
-      - name: Install CocoaPods dependencies
+      - name: Install CocoaPods
         script: |
           cd ios
           pod install
           cd ..
       
-      - name: Build iOS
+      - name: Build iOS IPA
         script: |
           flutter build ipa --release --export-options-plist=/Users/builder/export_options.plist
     
     artifacts:
       - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
     
     publishing:
+      email:
+        recipients:
+          - nikola.kerkez@example.com
+        notify:
+          success: true
+          failure: true
+      
       app_store_connect:
         auth: integration
         submit_to_testflight: true
