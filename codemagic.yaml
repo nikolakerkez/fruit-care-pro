@@ -62,7 +62,7 @@ workflows:
     publishing:
       email:
         recipients:
-          - nikola.kerkez@example.com
+          - nikola.kerkez@icloud.com
         notify:
           success: true
           failure: true
