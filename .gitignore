@@ -1,4 +1,4 @@
-# Flutter-specific
+# Flutter
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
@@ -7,67 +7,45 @@
 .pub/
 build/
 
-# iOS-specific
+# iOS
 ios/Pods/
 ios/.symlinks/
+ios/build/
 ios/Flutter/App.framework
 ios/Flutter/Flutter.framework
-ios/Flutter/Flutter.podspec
-ios/Flutter/Generated.xcconfig
-ios/Flutter/app.flx
-ios/Flutter/app.zip
-ios/Flutter/flutter_assets/
-ios/Flutter/flutter_export_environment.sh
-ios/ServiceDefinitions.json
-ios/Runner/GeneratedPluginRegistrant.*
 *.pbxuser
 *.mode1v3
 *.mode2v3
 *.perspectivev3
 *.xcuserstate
 *.xcworkspace/xcuserdata
-*.xcscheme
-**/xcshareddata/WorkspaceSettings.xcsettings
 .DS_Store
 
-# Android-specific
+# Android
+android/app/build/
 android/app/debug
 android/app/profile
 android/app/release
 android/.gradle/
 android/captures/
-android/gradlew
-android/gradlew.bat
 android/local.properties
 android/.idea/
 android/**/*.iml
-android/**/*.hprof
-android/**/GeneratedPluginRegistrant.java
-android/key.properties
+android/**/*.apk
+android/**/*.so
 
-# Firebase & Sensitive files
+# Firebase
 google-services.json
 GoogleService-Info.plist
 firebase_options.dart
-android/app/google-services.json
-ios/Runner/GoogleService-Info.plist
-lib/firebase_options.dart
 
-# Firebase Functions
+# Functions
 functions/node_modules/
-functions/.runtimeconfig.json
-functions/package-lock.json
 
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
 
 # Misc
 *.log
-*.pyc
-*.swp
 .env
-.env.local
