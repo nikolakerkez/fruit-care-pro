@@ -1,1 +1,55 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"bb-agro-portal","appId":"1:443103224820:android:9c1a2f76c77341f88ecfa1","fileOutput":"android/app/google-services.json"}},"ios":{"default":{"projectId":"bb-agro-portal","appId":"1:443103224820:ios:011af65ede60f5438ecfa1","uploadDebugSymbols":false,"fileOutput":"ios/Runner/GoogleService-Info.plist"}},"dart":{"lib/firebase_options.dart":{"projectId":"bb-agro-portal","configurations":{"android":"1:443103224820:android:9c1a2f76c77341f88ecfa1","ios":"1:443103224820:ios:011af65ede60f5438ecfa1"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "fruit-care-pro",
+          "appId": "1:782184044620:android:ddbe608de0c7d6b1b53ce9",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "fruit-care-pro",
+          "appId": "1:782184044620:ios:f3b8b78413dba988b53ce9",
+          "uploadDebugSymbols": true,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "macos": {
+        "default": {
+          "projectId": "fruit-care-pro",
+          "appId": "1:782184044620:ios:ad45d483727f13fdb53ce9",
+          "uploadDebugSymbols": true,
+          "fileOutput": "macos/Runner/GoogleService-Info.plist"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "fruit-care-pro",
+          "configurations": {
+            "android": "1:782184044620:android:ddbe608de0c7d6b1b53ce9",
+            "ios": "1:782184044620:ios:f3b8b78413dba988b53ce9",
+            "macos": "1:782184044620:ios:ad45d483727f13fdb53ce9",
+            "web": "1:782184044620:web:8dc2d08fdaadf0dab53ce9",
+            "windows": "1:782184044620:web:bd00ec40938906b7b53ce9"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+    }
+  ]
+}

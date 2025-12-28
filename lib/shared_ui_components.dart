@@ -1,9 +1,10 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 // Widget generateTextField({
-//     required String labelText, 
-//     required TextEditingController controller, 
-//     IconData? iconData, 
+//     required String labelText,
+//     required TextEditingController controller,
+//     IconData? iconData,
 //     double height = 40,
 //     double width = double.infinity,
 //     bool isPassword = false
@@ -19,7 +20,7 @@ import 'package:flutter/material.dart';
 //       labelText: labelText,
 //       labelStyle: TextStyle(
 //         color: Colors.green[800],
-//         fontSize: 14.0, 
+//         fontSize: 14.0,
 //       ),
 //       border: OutlineInputBorder(
 //         borderRadius: BorderRadius.circular(8),
@@ -56,20 +57,22 @@ Widget generateHorizontalLine(String title) {
   );
 }
 
-
 Widget generateTextField({
   required String labelText,
   required TextEditingController controller,
   IconData? iconData,
+  Widget? sufixIconWidget,
   double height = 40,
   int minLines = 1,
   int maxLines = 1,
   double? width,
   bool isPassword = false,
+  bool enabled = true,
   String? Function(String?)? validator,
   FocusNode? focusNode,
 }) {
   final textField = TextFormField(
+    enabled: enabled,
     minLines: minLines,
     maxLines: maxLines,
     obscureText: isPassword,
@@ -104,9 +107,10 @@ Widget generateTextField({
         borderSide: BorderSide(color: Colors.green[800]!, width: 1),
         borderRadius: BorderRadius.circular(8.0),
       ),
-      prefixIcon: iconData != null
-          ? Icon(iconData, color: Colors.green[800])
-          : null,
+      prefixIcon:
+          iconData != null ? Icon(iconData, color: Colors.green[800]) : null,
+      suffixIcon:
+          sufixIconWidget,
       contentPadding: EdgeInsets.symmetric(vertical: 12, horizontal: 12),
       // isDense: true, // -> ukloniti ili postaviti na false
     ),
@@ -123,44 +127,116 @@ Widget generateTextField({
   return textField;
 }
 
-
-SizedBox generateButton({
-  required String text,
-  required VoidCallback onPressed,
-  IconData? icon,
-  Color textColor = Colors.white,
-  Color? backgroundColor,
-  Color? borderColor,
-  double fontSize = 14.0,
-  double paddingVertical = 16.0,
-  double paddingHorizontal = 20.0,
-  double borderRadius = 12.0,
-  double minimumHeight = 30.0,
-  double height = 50,
-  double width = double.infinity
-}) {
-
-final Color finalBackgroundColor = backgroundColor ?? Colors.green[800]!;
-final Color finalBorderColor = borderColor ?? Colors.orangeAccent[400]!;
+SizedBox generateButton(
+    {required String text,
+    required VoidCallback onPressed,
+    IconData? icon,
+    Color textColor = Colors.white,
+    Color? backgroundColor,
+    Color? borderColor,
+    double fontSize = 14.0,
+    double paddingVertical = 16.0,
+    double paddingHorizontal = 20.0,
+    double borderRadius = 12.0,
+    double minimumHeight = 30.0,
+    double height = 50,
+    double width = double.infinity}) {
+  final Color finalBackgroundColor = backgroundColor ?? Colors.green[800]!;
+  final Color finalBorderColor = borderColor ?? Colors.brown[500]!;
 
   return SizedBox(
-    height: height,
-    width: width,
-    child: ElevatedButton.icon(
-    onPressed: onPressed,
-    icon: icon != null ? Icon(icon, color: textColor) : Container(), // Ako postoji ikona
-    label: Text(
-      text,
-      style: TextStyle(color: textColor, fontSize: fontSize),
-    ),
-    style: ElevatedButton.styleFrom(
-      backgroundColor: finalBackgroundColor,
-      padding: EdgeInsets.symmetric(vertical: paddingVertical, horizontal: paddingHorizontal),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(borderRadius),
-        side: BorderSide(color: finalBorderColor, width: 2),
-      ),
-      minimumSize: Size(double.infinity, minimumHeight),
-    ),
-  ));
+      height: height,
+      width: width,
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: icon != null
+            ? Icon(icon, color: textColor)
+            : Container(), // Ako postoji ikona
+        label: Text(
+          text,
+          style: TextStyle(color: textColor, fontSize: fontSize),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: finalBackgroundColor,
+          padding: EdgeInsets.symmetric(
+              vertical: paddingVertical, horizontal: paddingHorizontal),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(borderRadius),
+            side: BorderSide(color: finalBorderColor, width: 1),
+          ),
+          minimumSize: Size(double.infinity, minimumHeight),
+        ),
+      ));
+}
+
+void showErrorDialog(BuildContext context, String message, {int seconds = 3}) {
+  showDialog(
+    context: context,
+    barrierDismissible: true,
+    builder: (context) {
+      // automatsko zatvaranje nakon n sekundi
+      Future.delayed(Duration(seconds: seconds), () {
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+      });
+
+      return AlertDialog(
+        shape: RoundedRectangleBorder(
+          side: BorderSide(color: Colors.red[800] ?? Colors.red, width: 3),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        content: Row(
+          children: [
+            const SizedBox(width: 10),
+            Flexible(child: Text(message)),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+String formatChatTime(DateTime timestamp) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final yesterday = today.subtract(const Duration(days: 1));
+  final messageDate = DateTime(timestamp.year, timestamp.month, timestamp.day);
+  final difference = now.difference(timestamp);
+
+  // Ako je danas - prikaži vreme
+  if (messageDate == today) {
+    return '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}';
+  }
+
+  // Ako je juče
+  if (messageDate == yesterday) {
+    return 'Juče';
+  }
+
+  // Ako je ove nedelje - prikaži dan
+  if (difference.inDays < 7) {
+    return _getDayName(timestamp.weekday);
+  }
+
+  // Ako je ove godine - prikaži datum bez godine
+  if (timestamp.year == now.year) {
+    return '${timestamp.day}.${timestamp.month}.';
+  }
+
+  // Starije - pun datum
+  return '${timestamp.day}.${timestamp.month}.${timestamp.year}.';
+}
+
+String _getDayName(int weekday) {
+  switch (weekday) {
+    case 1: return 'Ponedeljak';
+    case 2: return 'Utorak';
+    case 3: return 'Sreda';
+    case 4: return 'Četvrtak';
+    case 5: return 'Petak';
+    case 6: return 'Subota';
+    case 7: return 'Nedelja';
+    default: return '';
+  }
 }

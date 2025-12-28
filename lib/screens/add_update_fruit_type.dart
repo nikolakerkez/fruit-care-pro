@@ -1,9 +1,8 @@
 
-import 'package:bb_agro_portal/models/fruit_type.dart';
-import 'package:bb_agro_portal/services/chat_service.dart';
-import 'package:bb_agro_portal/services/user_service.dart';
+import 'package:fruit_care_pro/models/fruit_type.dart';
+import 'package:fruit_care_pro/services/user_service.dart';
 import 'package:flutter/material.dart';
-import 'package:bb_agro_portal/services/fruit_types_service.dart';
+import 'package:fruit_care_pro/services/fruit_types_service.dart';
 
 class AddUpdateFruitType extends StatefulWidget {
   final FruitType? fruitType;
@@ -15,14 +14,20 @@ class AddUpdateFruitType extends StatefulWidget {
 }
 
 class _AddUpdateFruitTypeState extends State<AddUpdateFruitType> {
+
+  //---Text controllers---
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _treesController = TextEditingController();
+  //---Text controllers---
+
+  //---Services for db operations---
   final FruitTypesService _fruitTypesService = FruitTypesService();
-  final ChatService _chatService = ChatService();
   final UserService _userService = UserService();
+  //---Services for db operations---
+
   bool isAddNew = false;
   String _fruitTypeID = "999";
-
+  String adminId = "";
   @override
   void initState() {
     super.initState();
@@ -33,6 +38,17 @@ class _AddUpdateFruitTypeState extends State<AddUpdateFruitType> {
       _treesController.text = widget.fruitType!.numberOfTreesPerAre.toString();
       _fruitTypeID = widget.fruitType!.id;
     }
+
+    initialize();
+  }
+
+  void initialize() async
+  {
+    String? adminIdValue = await _userService.getAdminId();
+
+    setState(() {
+      adminId = adminIdValue!;
+    });
   }
 
   void _saveFruit() async {
@@ -43,8 +59,7 @@ class _AddUpdateFruitTypeState extends State<AddUpdateFruitType> {
         content: Row(
           children: [
             CircularProgressIndicator(),
-            SizedBox(width: 20),
-            Text("Čuvanje voćne vrste..."),
+            SizedBox(width: 20)
           ],
         ),
       ),
@@ -57,20 +72,9 @@ class _AddUpdateFruitTypeState extends State<AddUpdateFruitType> {
     );
 
     if (isAddNew) {
-
-       String fruitTypeId = await _fruitTypesService.addFruitType(fruit);
-       String? adminId = await _userService.getAdminId();
-
-       await _chatService.createNewGroupChat(fruitTypeId, fruit.name, []);
-       if (adminId != null)
-       {
-        print("Admin id "+adminId );
-        await _chatService.addUserChat(fruitTypeId, adminId);
-       }
+       String fruitTypeId = await _fruitTypesService.addFruitType(fruit, adminId);
     } else {
-
       await _fruitTypesService.updateFruitType(fruit);
-      await _chatService.updateGroupChatName(_fruitTypeID, fruit.name);
     }
 
     Navigator.pop(context);
@@ -102,7 +106,7 @@ class _AddUpdateFruitTypeState extends State<AddUpdateFruitType> {
               ),
               Container(
                 height: 3,
-                color: Colors.orangeAccent[400],
+                color: Colors.brown[500],
               ),
             ],
           ),

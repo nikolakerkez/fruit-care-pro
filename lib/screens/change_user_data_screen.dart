@@ -1,16 +1,14 @@
-import 'package:bb_agro_portal/models/create_user.dart';
-import 'package:bb_agro_portal/models/fruit_type.dart';
-import 'package:bb_agro_portal/models/user.dart';
-import 'package:bb_agro_portal/models/user_fruit_type.dart';
-import 'package:bb_agro_portal/screens/users_screen.dart';
-import 'package:bb_agro_portal/services/chat_service.dart';
-import 'package:bb_agro_portal/services/fruit_types_service.dart';
-import 'package:bb_agro_portal/services/user_service.dart';
+import 'package:fruit_care_pro/models/create_user.dart';
+import 'package:fruit_care_pro/models/fruit_type.dart';
+import 'package:fruit_care_pro/models/user.dart';
+import 'package:fruit_care_pro/models/user_fruit_type.dart';
+import 'package:fruit_care_pro/screens/users_screen.dart';
+import 'package:fruit_care_pro/services/fruit_types_service.dart';
+import 'package:fruit_care_pro/services/user_service.dart';
 import 'package:flutter/material.dart';
-import 'package:bb_agro_portal/shared_ui_components.dart';
+import 'package:fruit_care_pro/shared_ui_components.dart';
 
 class ChangeUserDataScreen extends StatefulWidget {
-
   final AppUser? appUser;
   const ChangeUserDataScreen({super.key, this.appUser});
 
@@ -20,25 +18,31 @@ class ChangeUserDataScreen extends StatefulWidget {
 
 class ChangeUserDataScreenState extends State<ChangeUserDataScreen> {
   final UserService _userService = UserService();
-  AppUser appUser = AppUser(id: "", name: "", email: "", isActive: false, isPremium: false, city: "", phone: "", isPasswordChangeNeeded: false, fruitTypes: []);
-
+  AppUser appUser = AppUser(
+      id: "",
+      name: "",
+      email: "",
+      isActive: false,
+      isPremium: false,
+      city: "",
+      phone: "",
+      isPasswordChangeNeeded: false,
+      fruitTypes: []);
 
   final FruitTypesService _fruitTypeService = FruitTypesService();
-  final ChatService _chatService = ChatService();
-  final TextEditingController _emailController = TextEditingController();
+
+  //---Text controllers for user info---
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _repeteadPasswordController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneNumberController = TextEditingController();
   final TextEditingController _cityController = TextEditingController();
+  //---Text controllers for user info---
 
-  final FocusNode _emailFocusNode = FocusNode();
-  final FocusNode _passwordFocusNode = FocusNode();
-  final FocusNode _repeatedPasswordFocusNode = FocusNode();
   final FocusNode _phoneNumberFocusNode = FocusNode();
   final FocusNode _NameFocusNode = FocusNode();
   final FocusNode _CityFocusNode = FocusNode();
 
+  //For form validation
   final _formKey = GlobalKey<FormState>();
 
   List<FruitType> fruitTypes = [];
@@ -46,7 +50,7 @@ class ChangeUserDataScreenState extends State<ChangeUserDataScreen> {
   final _numberOfTreesController = TextEditingController();
   List<UserFruitType> selectedFruits = <UserFruitType>[];
 
-     @override
+  @override
   void initState() {
     super.initState();
     if (widget.appUser != null) {
@@ -63,85 +67,44 @@ class ChangeUserDataScreenState extends State<ChangeUserDataScreen> {
       });
     }
 
-     _fruitTypeService.retrieveAllFruitTypes().listen((fruitList) {
+    _fruitTypeService.retrieveAllFruitTypes().listen((fruitList) {
       setState(() {
         fruitTypes = fruitList;
       });
     });
   }
 
+  List<FruitType> GetFruitTypes() {
+    final selectedFruitTypeIDs =
+        selectedFruits.map((e) => e.fruitTypeId).toSet();
+
+    List<FruitType> returnValue =
+        fruitTypes.where((e) => !selectedFruitTypeIDs.contains(e.id)).toList();
+
+    return returnValue;
+  }
+
   Future<void> changeUserData() async {
-    await _userService.changeUserData(CreateUserParam(
+    bool isActionExecuted = await _userService.changeUserData(CreateUserParam(
       id: appUser.id,
       name: _nameController.text,
-      email: _nameController.text.toLowerCase().replaceAll(' ', '') + "@agrobb.com",
+      email:
+          "${_nameController.text.toLowerCase().replaceAll(' ', '')}@agrobb.com",
       password: _passwordController.text,
       city: _cityController.text,
       phone: _phoneNumberController.text,
       fruitTypes: selectedFruits,
     ));
+    if (!mounted) return;
 
-    for (var fruitType in selectedFruits) {
-        _chatService.addUserChat(fruitType.fruitTypeId, appUser.id);
-      }
-
-
+    if (!isActionExecuted) {
+      showErrorDialog(context, "Došlo je do greške.");
+      return;
+    }
     Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const UserListScreen()),
-        );
-  }
-
-  Future<void> createNewAccount() async {
-    String? userId = await _userService.createNewUser(CreateUserParam(
-      id: '',
-      name: _nameController.text,
-      email: _nameController.text.toLowerCase().replaceAll(' ', '') + "@agrobb.com",
-      password: _passwordController.text,
-      city: _cityController.text,
-      phone: _phoneNumberController.text,
-      fruitTypes: selectedFruits,
-    ));
-    print("Finished adding user");
-    print(userId);
-    if (userId != null)
-    {
-      for (var fruitType in selectedFruits) {
-        _chatService.addUserChat(fruitType.fruitTypeId, userId);
-      }
-
-      String? adminId = await _userService.getAdminId();
-      if (adminId != null)
-      {
-        print("adminId " + adminId);
-        String privateChatId = await _generateChatId(adminId, userId);
-        print("privateChatId " + privateChatId);
-        await _chatService.createNewPrivateChat(privateChatId ,"Private chat");
-        await _chatService.addUserChat(privateChatId, userId);
-        await _chatService.addUserChat(privateChatId, adminId);
-
-      }
-      else
-      {
-        print('Failed to find admin');
-      }
-    }
-
-     Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const UserListScreen()),
-        );
-  }
-
-  String? emailValidator(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'Molimo unesite email';
-    }
-    final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
-    if (!emailRegex.hasMatch(value)) {
-      return 'Unesite validan email';
-    }
-    return null;
+      context,
+      MaterialPageRoute(builder: (context) => const UserListScreen()),
+    );
   }
 
   String? passwordValidator(String? value) {
@@ -170,19 +133,30 @@ class ChangeUserDataScreenState extends State<ChangeUserDataScreen> {
     }
     return null;
   }
-
-  Future<String> _generateChatId(String user1Id ,String user2Id) async {
-      String generatedChatId = '';
-      if (user1Id.compareTo(user2Id) < 0) {
-          generatedChatId = 'chat_${user1Id}_$user2Id';
-        } else {
-          generatedChatId = 'chat_${user2Id}_$user1Id';
-        }
-
-      return generatedChatId;
-  }
+  void _showCannotEditMessage() {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Row(
+        children: const [
+          Icon(Icons.lock_outline, color: Colors.white),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text('Nemate dozvolu za izmenu voćnih vrsta'),
+          ),
+        ],
+      ),
+      backgroundColor: Colors.brown[500],
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 2),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+      ),
+    ),
+  );
+}
   @override
   Widget build(BuildContext context) {
+    final canEdit = appUser.isAdmin;
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: Size.fromHeight(kToolbarHeight + 3),
@@ -193,9 +167,10 @@ class ChangeUserDataScreenState extends State<ChangeUserDataScreen> {
               AppBar(
                 elevation: 0,
                 backgroundColor: Colors.transparent,
-                title: Text('Izmena podataka', style: TextStyle(color: Colors.white)),
+                title: Text('Izmena podataka',
+                    style: TextStyle(color: Colors.white)),
               ),
-              Container(height: 3, color: Colors.orangeAccent[400]),
+              Container(height: 3, color: Colors.brown[500]),
             ],
           ),
         ),
@@ -212,12 +187,12 @@ class ChangeUserDataScreenState extends State<ChangeUserDataScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
               child: generateTextField(
-                labelText: "Ime",
-                controller: _nameController,
-                iconData: Icons.person,
-                focusNode: _NameFocusNode,
-                validator: nameValidator,
-              ),
+                  labelText: "Ime",
+                  controller: _nameController,
+                  iconData: Icons.person,
+                  focusNode: _NameFocusNode,
+                  validator: nameValidator,
+                  enabled: false),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
@@ -265,152 +240,201 @@ class ChangeUserDataScreenState extends State<ChangeUserDataScreen> {
             ),
             // Primer kako da koristiš u Row
 
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    flex: 3,
-                    child: SizedBox(
-                      height: 50,  // ista visina kao i TextFormField
-                      child: DropdownButtonFormField<String>(
-                        isExpanded: true,
-                        decoration: InputDecoration(
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.grey),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.green[800]!),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        value: selectedFruitType,
-                        hint: Text("Voćna vrsta", style: TextStyle(fontSize: 14)),
-                        items: fruitTypes.map((fruit) {
-                          return DropdownMenuItem<String>(
-                            value: fruit.id,
-                            child: Text(fruit.name, style: TextStyle(fontSize: 14)),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          setState(() {
-                            selectedFruitType = value;
-                          });
-                        },
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: 10),
-                  Expanded(
-                    flex: 2,
-                    child: SizedBox(
-                      height: 50,  // isto
-                      child: generateTextField(
-                        labelText: "Br. st.",
-                        controller: _numberOfTreesController,
-                        height: 50, // prosledi height
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: 10),
-                  Container(
-                    height: 50,  // da dugme bude iste visine ako želiš
-                    decoration: BoxDecoration(
-                      color: Colors.green[800],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: IconButton(
-                      onPressed: () {
-                                    if (selectedFruitType != null && _numberOfTreesController.text.isNotEmpty) {
-                                      setState(() {
-                                        selectedFruits.add(UserFruitType(
-                                          fruitTypeId: selectedFruitType!,
-                                          fruitTypeName: fruitTypes
-                                              .firstWhere((fruit) => fruit.id == selectedFruitType!)
-                                              .name,
-                                          numberOfTrees: int.parse(_numberOfTreesController.text),
-                                        ));
-                                        _numberOfTreesController.clear();
-                                        selectedFruitType = null;
-                                      });
-                                    }
+            // 🔥 Dodaj boolean flag
+
+// 🔥 Obavij sve u GestureDetector + AbsorbPointer
+            GestureDetector(
+              onTap: !canEdit ? _showCannotEditMessage : null,
+              child: Opacity(
+                opacity: canEdit ? 1.0 : 0.5,
+                child: AbsorbPointer(
+                  absorbing: !canEdit,
+                  child: Column(
+                    children: [
+                      // 🔥 PRVI PADDING - Dropdown, TextField, Add dugme
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 40, vertical: 0),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: SizedBox(
+                                height: 50,
+                                child: DropdownButtonFormField<String>(
+                                  isExpanded: true,
+                                  decoration: InputDecoration(
+                                    contentPadding: EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 12),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderSide:
+                                          BorderSide(color: Colors.grey),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderSide:
+                                          BorderSide(color: Colors.green[800]!),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                  value: selectedFruitType,
+                                  hint: Text("Voćna vrsta",
+                                      style: TextStyle(fontSize: 14)),
+                                  items: GetFruitTypes().map((fruit) {
+                                    return DropdownMenuItem<String>(
+                                      value: fruit.id,
+                                      child: Text(fruit.name,
+                                          style: TextStyle(fontSize: 14)),
+                                    );
+                                  }).toList(),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      selectedFruitType = value;
+                                    });
                                   },
-                      icon: Icon(Icons.add, color: Colors.white),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 10),
-              child: ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: selectedFruits.length,
-                itemBuilder: (context, index) {
-                  final fruit = selectedFruits[index];
-                  final isEven = index % 2 == 0;
-                  final controller = TextEditingController(text: fruit.numberOfTrees.toString());
-
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: isEven ? Colors.grey[200] : Colors.white,
-                      border: Border.all(
-                        color: Colors.orangeAccent[400] ?? Colors.orange,
-                        width: 1,
-                      ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-                      child: Row(
-                        children: [
-                          // Naziv voćne vrste
-                          Expanded(
-                            flex: 2,
-                            child: Text(
-                              fruit.fruitTypeName,
-                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                            ),
-                          ),
-
-                          // Polje za unos broja stabala
-                          Expanded(
-                            flex: 1,
-                            child: TextField(
-                              controller: controller,
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                hintText: 'Broj stabala',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                ),
                               ),
-                              onChanged: (value) {
-                                  fruit.numberOfTrees = int.tryParse(value) ?? 0;
-                              },
                             ),
-                          ),
-
-                          // Ikonica za brisanje
-                          IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () {
-                              setState(() {
-                                selectedFruits.removeAt(index);
-                              });
-                            },
-                          ),
-                        ],
+                            SizedBox(width: 10),
+                            Expanded(
+                              flex: 2,
+                              child: SizedBox(
+                                height: 50,
+                                child: generateTextField(
+                                  labelText: "Br. st.",
+                                  controller: _numberOfTreesController,
+                                  height: 50,
+                                ),
+                              ),
+                            ),
+                            SizedBox(width: 10),
+                            Container(
+                              height: 50,
+                              decoration: BoxDecoration(
+                                color: Colors.green[800],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: IconButton(
+                                onPressed: () {
+                                  if (selectedFruitType != null &&
+                                      _numberOfTreesController
+                                          .text.isNotEmpty) {
+                                    setState(() {
+                                      selectedFruits.add(UserFruitType(
+                                        fruitTypeId: selectedFruitType!,
+                                        fruitTypeName: fruitTypes
+                                            .firstWhere((fruit) =>
+                                                fruit.id == selectedFruitType!)
+                                            .name,
+                                        numberOfTrees: int.parse(
+                                            _numberOfTreesController.text),
+                                      ));
+                                      _numberOfTreesController.clear();
+                                      selectedFruitType = null;
+                                    });
+                                  }
+                                },
+                                icon: Icon(Icons.add, color: Colors.white),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  );
-                },
+
+                      // 🔥 DRUGI PADDING - Lista voćnih vrsta
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 40, vertical: 10),
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: selectedFruits.length,
+                          itemBuilder: (context, index) {
+                            final fruit = selectedFruits[index];
+                            final isEven = index % 2 == 0;
+                            final controller = TextEditingController(
+                                text: fruit.numberOfTrees.toString());
+
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color:
+                                      isEven ? Colors.grey[200] : Colors.white,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: Colors.green[800] ?? Colors.brown,
+                                    width: 1,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.05),
+                                      offset: const Offset(0, 2),
+                                      blurRadius: 4,
+                                    ),
+                                  ],
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 5, horizontal: 20),
+                                  child: Row(
+                                    children: [
+                                      // Naziv voćne vrste
+                                      Expanded(
+                                        flex: 2,
+                                        child: Text(
+                                          fruit.fruitTypeName,
+                                          style: const TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w600),
+                                        ),
+                                      ),
+
+                                      // Polje za unos broja stabala
+                                      Expanded(
+                                        flex: 1,
+                                        child: TextField(
+                                          controller: controller,
+                                          keyboardType: TextInputType.number,
+                                          decoration: const InputDecoration(
+                                            hintText: 'Broj stabala',
+                                            border: OutlineInputBorder(),
+                                            isDense: true,
+                                            contentPadding:
+                                                EdgeInsets.symmetric(
+                                                    horizontal: 8, vertical: 6),
+                                          ),
+                                          onChanged: (value) {
+                                            fruit.numberOfTrees =
+                                                int.tryParse(value) ?? 0;
+                                          },
+                                        ),
+                                      ),
+
+                                      // Ikonica za brisanje
+                                      IconButton(
+                                        icon: const Icon(Icons.close,
+                                            color: Colors.red),
+                                        onPressed: () {
+                                          setState(() {
+                                            selectedFruits.removeAt(index);
+                                          });
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
 
@@ -430,4 +454,4 @@ class ChangeUserDataScreenState extends State<ChangeUserDataScreen> {
       ),
     );
   }
-  }
+}

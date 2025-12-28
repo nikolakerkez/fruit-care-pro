@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class FruitType {
-  final String id;
+  String id;
   final String name;
   final int? numberOfTreesPerAre;
   TextEditingController controller;

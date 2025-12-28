@@ -17,10 +17,7 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      throw UnsupportedError(
-        'DefaultFirebaseOptions have not been configured for web - '
-        'you can reconfigure this by running the FlutterFire CLI again.',
-      );
+      return web;
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -28,15 +25,9 @@ class DefaultFirebaseOptions {
       case TargetPlatform.iOS:
         return ios;
       case TargetPlatform.macOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for macos - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return macos;
       case TargetPlatform.windows:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for windows - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return windows;
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -49,20 +40,49 @@ class DefaultFirebaseOptions {
     }
   }
 
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyAbhPUsyJZqhOVIlcVLEeCYR4ypqje3o2A',
+    appId: '1:782184044620:web:8dc2d08fdaadf0dab53ce9',
+    messagingSenderId: '782184044620',
+    projectId: 'fruit-care-pro',
+    authDomain: 'fruit-care-pro.firebaseapp.com',
+    storageBucket: 'fruit-care-pro.firebasestorage.app',
+    measurementId: 'G-ZNV3LLEVFC',
+  );
+
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyCH8msBo1BY5fIIfAf3CETtj2l6CVRN6JI',
-    appId: '1:443103224820:android:9c1a2f76c77341f88ecfa1',
-    messagingSenderId: '443103224820',
-    projectId: 'bb-agro-portal',
-    storageBucket: 'bb-agro-portal.firebasestorage.app',
+    apiKey: 'AIzaSyAQSdS20ksta5G5EHKOCLPPwnLvJxAtj5k',
+    appId: '1:782184044620:android:ddbe608de0c7d6b1b53ce9',
+    messagingSenderId: '782184044620',
+    projectId: 'fruit-care-pro',
+    storageBucket: 'fruit-care-pro.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyBxBBAdwoZcLJXolzUCNZcoOts0UFjVfQE',
-    appId: '1:443103224820:ios:011af65ede60f5438ecfa1',
-    messagingSenderId: '443103224820',
-    projectId: 'bb-agro-portal',
-    storageBucket: 'bb-agro-portal.firebasestorage.app',
+    apiKey: 'AIzaSyDyRRmB0zzC0m41X6OEfBc76hXT3jEXi6Y',
+    appId: '1:782184044620:ios:f3b8b78413dba988b53ce9',
+    messagingSenderId: '782184044620',
+    projectId: 'fruit-care-pro',
+    storageBucket: 'fruit-care-pro.firebasestorage.app',
+    iosBundleId: 'rs.nikolakerkez.fruitcarepro',
+  );
+
+  static const FirebaseOptions macos = FirebaseOptions(
+    apiKey: 'AIzaSyDyRRmB0zzC0m41X6OEfBc76hXT3jEXi6Y',
+    appId: '1:782184044620:ios:ad45d483727f13fdb53ce9',
+    messagingSenderId: '782184044620',
+    projectId: 'fruit-care-pro',
+    storageBucket: 'fruit-care-pro.firebasestorage.app',
     iosBundleId: 'com.example.bbAgroPortal',
+  );
+
+  static const FirebaseOptions windows = FirebaseOptions(
+    apiKey: 'AIzaSyAbhPUsyJZqhOVIlcVLEeCYR4ypqje3o2A',
+    appId: '1:782184044620:web:bd00ec40938906b7b53ce9',
+    messagingSenderId: '782184044620',
+    projectId: 'fruit-care-pro',
+    authDomain: 'fruit-care-pro.firebaseapp.com',
+    storageBucket: 'fruit-care-pro.firebasestorage.app',
+    measurementId: 'G-68ZLNCTC36',
   );
 }

@@ -1,544 +1,875 @@
 import 'dart:io';
-
-import 'package:bb_agro_portal/current_user_service.dart';
-import 'package:bb_agro_portal/models/user.dart';
+import 'package:fruit_care_pro/current_user_service.dart';
+import 'package:fruit_care_pro/widgets/date_separator.dart';
+import 'package:fruit_care_pro/models/user.dart';
+import 'package:fruit_care_pro/screens/full_screen_image_viewer.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:bb_agro_portal/models/message.dart';
-import 'package:bb_agro_portal/services/chat_service.dart';
-import 'package:bb_agro_portal/shared_ui_components.dart';
-import 'package:bb_agro_portal/services/user_service.dart';
+import 'package:fruit_care_pro/services/chat_service.dart';
+import 'package:fruit_care_pro/shared_ui_components.dart';
+import 'package:fruit_care_pro/services/user_service.dart';
 import 'dart:async';
-import 'package:bb_agro_portal/screens/user_details_screen.dart';
+import 'package:fruit_care_pro/widgets/user_details_screen.dart';
 import 'package:image_picker/image_picker.dart';
 
-
 class UserPrivateChatScreen extends StatefulWidget {
-  //final String? userId;
   final String? chatId;
   final String? userId;
-  const UserPrivateChatScreen({super.key, this.chatId, this.userId});
+
+  const UserPrivateChatScreen({
+    super.key,
+    this.chatId,
+    this.userId,
+  });
 
   @override
-  _UserPrivateChatScreenState createState() => _UserPrivateChatScreenState();
+  State<UserPrivateChatScreen> createState() => _UserPrivateChatScreenState();
 }
 
 class _UserPrivateChatScreenState extends State<UserPrivateChatScreen> {
-  String adminId = '';
-  String chatId = '';
-  String userId = '';
-  AppUser? admin;
-  bool isLoading = true;
-  bool isLoadingMessages = false;
-  TextEditingController messageTextController = TextEditingController();
-  final UserService userService = UserService();
-  final ChatService chatService = ChatService();
+  // Services
+  final UserService _userService = UserService();
+  final ChatService _chatService = ChatService();
+  final ImagePicker _imagePicker = ImagePicker();
 
- final currentUser = CurrentUserService.instance.currentUser;
-  // Paginacija
-  DocumentSnapshot? _lastDocument;
-  final List<Message> _messages = [];
-  final ScrollController _scrollController = ScrollController(); // ScrollController
-  final StreamController<List<DocumentSnapshot>> _chatController =
+  // Controllers
+  final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+
+  // ✅ BOLJE: Koristi StreamController samo za kontrolu, ne i za caching
+  final StreamController<List<DocumentSnapshot>> _chatStreamController =
       StreamController<List<DocumentSnapshot>>.broadcast();
-  final List<List<DocumentSnapshot>> _allPagedResults = [<DocumentSnapshot>[]];
+
+  // State variables
+  String _adminId = '';
+  String _chatId = '';
+  String _userId = '';
+  AppUser? _admin;
+  bool _isLoading = true;
   bool _hasMoreData = true;
 
-  Timestamp? userLastMessageTimestamp;
-@override
-void dispose() {
-  _scrollController.dispose();
-  _chatController.close();  // Add this line to properly close the StreamController.
-  super.dispose();
-}
+  // ✅ NOVO: Čuvaj sve subscriptions
+  final List<StreamSubscription> _subscriptions = [];
+
+  // Pagination
+  DocumentSnapshot? _lastDocument;
+  final List<List<DocumentSnapshot>> _allPagedResults = [<DocumentSnapshot>[]];
+  Timestamp? _userLastMessageTimestamp;
+
+  AppUser? get _currentUser => CurrentUserService.instance.currentUser;
+  
   @override
   void initState() {
+    debugPrint('🚀 ========================================');
+    debugPrint('🚀 UserPrivateChatScreen initState STARTED');
+    debugPrint('🚀 widget.chatId: ${widget.chatId}');
+    debugPrint('🚀 widget.userId: ${widget.userId}');
+    debugPrint('🚀 ========================================');
+
     super.initState();
     _initialize();
+    _setupScrollListener();
+  }
 
-    
+  @override
+  void dispose() {
+    debugPrint('🧹 Disposing UserPrivateChatScreen...');
 
+    // ✅ 1. PRVO otkaži SVE Firestore listenere
+    for (var subscription in _subscriptions) {
+      subscription.cancel();
+    }
+    _subscriptions.clear();
+
+    // ✅ 2. ONDA zatvori stream controller
+    _chatStreamController.close();
+
+    // ✅ 3. Na kraju dispozuj controllers
+    _messageController.dispose();
+    _scrollController.dispose();
+
+    super.dispose();
+  }
+
+  // ==================== INITIALIZATION ====================
+
+  Future<void> _initialize() async {
+    await _extractRouteParameters();
+    await _loadAdminId();
+    await _loadAdminUser();
+    await _markMessagesAsRead();
+    _finalizeInitialization();
+  }
+
+  Future<void> _extractRouteParameters() async {
+    if (widget.userId != null) {
+      _userId = widget.userId!;
+    }
+    if (widget.chatId != null) {
+      _chatId = widget.chatId!;
+    }
+  }
+
+  Future<void> _loadAdminId() async {
+    final id = await _userService.getAdminId();
+    if (id != null && mounted) {
+      setState(() => _adminId = id);
+    }
+  }
+
+  Future<void> _loadAdminUser() async {
+    if (_adminId.isEmpty) return;
+
+    final user = await _userService.getUserById(_adminId);
+    if (mounted) {
+      setState(() => _admin = user);
+    }
+  }
+
+  Future<void> _markMessagesAsRead() async {
+    if (_chatId.isNotEmpty && _userId.isNotEmpty) {
+      await _chatService.markMessagesAsRead(_chatId, _userId);
+    }
+  }
+
+  void _finalizeInitialization() {
+    if (_adminId.isNotEmpty && _userId.isNotEmpty && _chatId.isNotEmpty) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  void _setupScrollListener() {
     _scrollController.addListener(() {
-      if (_scrollController.offset >=
-              (_scrollController.position.maxScrollExtent) &&
-          !_scrollController.position.outOfRange) {
-       _getChats('scroll');
+      if (_isAtScrollThreshold && !_scrollController.position.outOfRange) {
+        _loadMoreMessages();
       }
     });
   }
 
- Stream<List<DocumentSnapshot>> listenToChatsRealTime() {
-    _getChats('liste to chat');
-    //return _chatController.stream;
-    return _chatController.stream;
-  }
-  // Initialize data (get adminId and set chatId)
-  Future<void> _initialize() async {
-    if (widget.userId != null) {
-      setState(() {
-        userId = widget.userId?.toString() ?? ''; 
-      });
-    }
-
-    if (widget.chatId != null) {
-      setState(() {
-        chatId = widget.chatId?.toString() ?? ''; 
-      });
-    }
-
-    await _getAdminId();
-
-    _loadUser(adminId);
-    
-
-    chatService.markMessagesAsRead(chatId, adminId);
-
-    if (adminId.isNotEmpty && userId.isNotEmpty && chatId.isNotEmpty) {
-      setState(() {
-        isLoading = false; 
-      });
-
-   //   _getChats('init');
-    }
+  bool get _isAtScrollThreshold {
+    return _scrollController.offset >=
+        _scrollController.position.maxScrollExtent;
   }
 
-  Future<void> _getAdminId() async {
-    String? id = await userService.getAdminId();
-    if (id != null) {
-      setState(() {
-        adminId = id;
-      });
-    }
+  // ==================== CHAT LOADING ====================
+
+  Stream<List<DocumentSnapshot>> _listenToChatsRealTime() {
+    _loadMoreMessages();
+    return _chatStreamController.stream;
   }
 
-  Future<void> _generateChatId() async {
-      String generatedChatId = '';
-      if (adminId.compareTo(userId) < 0) {
-          generatedChatId = 'chat_${adminId}_$userId';
-        } else {
-          generatedChatId = 'chat_${userId}_$adminId';
-        }
-
-      setState(() {
-        chatId = generatedChatId;
-      });
-  }
-  
-
-  // Load messages from Firestore for paginaciju
-  Future<void> _loadMessages() async {
-    if (isLoadingMessages) return;
-
-    setState(() {
-      isLoadingMessages = true;
-    });
-
-    QuerySnapshot querySnapshot;
-
-    if (_lastDocument == null) {
-      // First load (load most recent messages)
-      print(chatId);
-
-      querySnapshot = await FirebaseFirestore.instance
-          .collection('chats')
-          .doc(chatId)
-          .collection('messages')
-          .orderBy('timestamp', descending: true) // Sort descending for latest first
-          .limit(20)
-          .get();
-    } else {
-      // Load older messages when scrolling up
-      querySnapshot = await FirebaseFirestore.instance
-          .collection('chats')
-          .doc(chatId)
-          .collection('messages')
-          .orderBy('timestamp', descending: true) // Sort descending for latest first
-          .startAfterDocument(_lastDocument!)  // Paginate by starting after the last document
-          .limit(20)
-          .get();
+  void _loadMoreMessages() {
+    if (!_hasMoreData) {
+      debugPrint('⚠️ No more data to load');
+      return;
     }
 
-    print("Count: ${querySnapshot.docs.length}");
+    final query = _buildMessagesQuery();
+    final currentRequestIndex = _allPagedResults.length;
 
-    if (querySnapshot.docs.isNotEmpty) {
-      setState(() {
-        // Add new messages at the top of the list
-        _messages.insertAll(_messages.length, querySnapshot.docs
-            .map((doc) => Message.fromFirestore(doc))
-            .toList());
-        _lastDocument = querySnapshot.docs.last;  // Update the last document after loading more
-      });
-    }
+    debugPrint('📥 Loading messages batch #$currentRequestIndex');
 
-    setState(() {
-      isLoadingMessages = false;
-    });
+    // ✅ Sačuvaj subscription
+    final subscription = query.snapshots().listen(
+          (snapshot) => _handleMessagesSnapshot(snapshot, currentRequestIndex),
+          onError: (error) => debugPrint('❌ Error loading messages: $error'),
+        );
+
+    _subscriptions.add(subscription);
   }
 
-  void _getChats(String s) {
-    print("get-chats-triggered with id: $s $chatId");
-    final CollectionReference chatCollectionReference = FirebaseFirestore
-        .instance
-        .collection("chats")
-        .doc(chatId)
-        .collection("messages");
-    var pagechatQuery = chatCollectionReference
+  Query<Map<String, dynamic>> _buildMessagesQuery() {
+    Query<Map<String, dynamic>> query = FirebaseFirestore.instance
+        .collection('chats')
+        .doc(_chatId)
+        .collection('messages')
         .orderBy('timestamp', descending: true)
         .limit(20);
 
     if (_lastDocument != null) {
-      pagechatQuery = pagechatQuery.startAfterDocument(_lastDocument!);
+      query = query.startAfterDocument(_lastDocument!);
     }
 
-    print(_hasMoreData);
+    return query;
+  }
 
-    if (!_hasMoreData) return;
+  void _handleMessagesSnapshot(
+    QuerySnapshot snapshot,
+    int currentRequestIndex,
+  ) {
+    // ✅ KRITIČNO: Proveri mounted status
+    if (!mounted) {
+      debugPrint('⚠️ Widget not mounted, ignoring snapshot');
+      return;
+    }
 
-    var currentRequestIndex = _allPagedResults.length;
-    
-    pagechatQuery.snapshots().listen(
-      (snapshot) {
-        print(snapshot.docs.length);
-        if (snapshot.docs.isNotEmpty) {
+    if (snapshot.docs.isEmpty) {
+      debugPrint('⚠️ Empty snapshot - no more messages');
 
+      // ✅ Proveri da li je stream još otvoren
+      if (!_chatStreamController.isClosed) {
+        _chatStreamController.add([]);
+      }
 
-          var generalChats = snapshot.docs.toList();
+      setState(() => _hasMoreData = false);
+      return;
+    }
 
-          var userChats = generalChats.where((chat) => chat['senderId'] == userId).toList();
+    debugPrint('✅ Received ${snapshot.docs.length} messages');
 
-          if (userChats.isNotEmpty) {
-            // Sortiraj poruke po timestamp-u, u opadajućem redosledu
-            userChats.sort((a, b) => b['timestamp'].compareTo(a['timestamp']));
+    _updateUserLastMessageTimestamp(snapshot.docs);
+    _updatePagedResults(snapshot.docs, currentRequestIndex);
+    _emitAllMessages();
+    _updatePaginationState(snapshot.docs, currentRequestIndex);
+  }
 
-            Map latestMessageData = userChats.first.data() as Map;
+  void _emitAllMessages() {
+    // ✅ Proveri da li je stream zatvoren
+    if (_chatStreamController.isClosed) {
+      debugPrint('⚠️ Stream controller is closed, cannot emit messages');
+      return;
+    }
 
-            
-            // Uzmi najnoviju poruku
-            Timestamp latestMessageTimestamp = latestMessageData['timestamp'];
+    final allMessages = _allPagedResults.expand((page) => page).toList();
+    debugPrint('📤 Emitting ${allMessages.length} total messages');
+    _chatStreamController.add(allMessages);
+  }
 
-            if (userLastMessageTimestamp == null || userLastMessageTimestamp!.compareTo(latestMessageTimestamp) < 0) {
-              userLastMessageTimestamp = latestMessageTimestamp;
+  void _updateUserLastMessageTimestamp(List<DocumentSnapshot> docs) {
+    final userMessages = docs
+        .where((doc) => doc['senderId'] == _adminId)
+        .toList()
+      ..sort((a, b) =>
+          (b['timestamp'] as Timestamp).compareTo(a['timestamp'] as Timestamp));
 
-              print(latestMessageData['message']);
-            }
-          }
+    if (userMessages.isNotEmpty) {
+      final latestTimestamp = userMessages.first['timestamp'] as Timestamp;
+      if (_userLastMessageTimestamp == null ||
+          _userLastMessageTimestamp!.compareTo(latestTimestamp) < 0) {
+        _userLastMessageTimestamp = latestTimestamp;
+      }
+    }
+  }
 
-          var pageExists = currentRequestIndex < _allPagedResults.length;
+  void _updatePagedResults(
+    List<DocumentSnapshot> docs,
+    int currentRequestIndex,
+  ) {
+    if (currentRequestIndex < _allPagedResults.length) {
+      _allPagedResults[currentRequestIndex] = docs;
+    } else {
+      _allPagedResults.add(docs);
+    }
+  }
 
-          if (pageExists) {
-            _allPagedResults[currentRequestIndex] = generalChats;
-          } else {
-            _allPagedResults.add(generalChats);
-          }
+  void _updatePaginationState(
+    List<DocumentSnapshot> docs,
+    int currentRequestIndex,
+  ) {
+    if (currentRequestIndex == _allPagedResults.length - 1) {
+      _lastDocument = docs.last;
+    }
+    _hasMoreData = docs.length == 20;
+  }
 
-          var allChats = _allPagedResults.fold<List<DocumentSnapshot>>(
-              <DocumentSnapshot>[],
-              (initialValue, pageItems) => initialValue..addAll(pageItems));
+  // ==================== MESSAGE SENDING ====================
 
-          _chatController.add(allChats);
+  Future<void> _sendTextMessage() async {
+    final text = _messageController.text.trim();
+    if (text.isEmpty) return;
 
-          if (currentRequestIndex == _allPagedResults.length - 1) {
-            _lastDocument = snapshot.docs.last;
-          }
+    _messageController.clear();
+    await _sendMessage(messageText: text);
+  }
 
-          print(generalChats.length);
-          _hasMoreData = generalChats.length == 20;
-        }
-      },
+  Future<void> _sendImageMessage() async {
+    final pickedFile = await _imagePicker.pickImage(
+      source: ImageSource.gallery,
+    );
+
+    if (pickedFile != null) {
+      final imageFile = File(pickedFile.path);
+      await _chatService.sendMessage(
+        _chatId,
+        _userId,
+        _adminId,
+        '',
+        imageFile,
+      );
+    }
+  }
+
+  Future<void> _sendMessage({String? messageText, String? imageUrl}) async {
+    if (_chatId.isEmpty || _userId.isEmpty) return;
+
+    final message = messageText ?? imageUrl ?? '';
+    await _chatService.sendMessage(
+      _chatId,
+      _userId,
+      _adminId,
+      message,
+      null,
     );
   }
 
-  // Send message to the chat
-  void _sendMessage({String? messageText, String? imageUrl}) {
-    if (chatId.isNotEmpty && userId.isNotEmpty) {
-      String message = messageText ?? '';
-      if (imageUrl != null) {
-        message = imageUrl;
-      }
+  // ==================== NAVIGATION ====================
 
-      messageTextController.clear();
-      chatService.sendMessage(chatId, userId, adminId, message, null);
-    }
+  void _navigateToUserDetails(String userId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => UserDetailsScreen(userId: userId),
+      ),
+    );
   }
 
-  // Pick image (implementacija za slike)
-  Future<void> _pickImage() async {
-
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-
-    if (pickedFile != null) {
-      File imageFile = File(pickedFile.path);
-          chatService.sendMessage(chatId, userId, adminId, "", imageFile);
-      }
-  }
-
-  void _loadUser(String userId) async {
-    print(userId);
-    AppUser? dbUser = await userService.getUserById(userId);
-    setState(() {
-      print(dbUser?.name);
-      admin = dbUser;
-    });
-  }
-  @override
-  Widget build(BuildContext context){
-
-    if (isLoading) {
-      return Scaffold(
-        appBar: AppBar(title: Text('')),
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    if (chatId.isEmpty) {
-      return Scaffold(
-        appBar: AppBar(
-          title: Text('Portal BB'),
+void _navigateToImageViewer(String? imageUrl, String? localPath, String? messageId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FullScreenImageViewer(
+          imageUrl: imageUrl,
+          localPath: localPath,
+          messageId: messageId,
         ),
-        body: Center(child: Text('Chat ID nije dostupan.')),
-      );
+      ),
+    );
+  }
+
+  // ==================== BUILD METHODS ====================
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return _buildLoadingScreen();
+    }
+
+    if (_chatId.isEmpty) {
+      return _buildErrorScreen();
     }
 
     return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: Size.fromHeight(kToolbarHeight + 3),
-        child: Container(
-          color: Colors.green[800], // Boja pozadine AppBar-a
-          child: Column(
-            children: [
-              AppBar(
-                elevation: 0,
-                backgroundColor: Colors.transparent,
-                title: Row(
-                  children: [
-                    SizedBox(width: 30),   
-                    GestureDetector(
-                      onTap: () {
-
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => UserDetailsScreen(userId: adminId),
-                          ),
-                        );
-                      },
-                      child: Icon(Icons.account_circle,
-                        size: 35)),  // Ikonica
-                    SizedBox(width: 8),           // Razmak između ikone i imena
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => UserDetailsScreen(userId: userId,),
-                          ),
-                        );
-                      },
-                      child: Text(admin?.name ?? "", style: TextStyle(color: Colors.white))),
-            ],
-          ),
-              ),
-              Container(
-                height: 3,
-                color: Colors.orangeAccent[400],
-              ),
-            ],
-          ),
-        ),
-      ),
-
-      
+      appBar: _buildAppBar(),
       body: Column(
         children: [
-          // Chat with admin
-          Expanded(
-            child: StreamBuilder<List<DocumentSnapshot>>(
-                stream:  listenToChatsRealTime(),
-                builder: (ctx, chatSnapshot)
-                {
-                  if (chatSnapshot.connectionState == ConnectionState.waiting ||
-                    chatSnapshot.connectionState == ConnectionState.none) {
-                      return chatSnapshot.hasData
-                      ? Center(
-                          child: CircularProgressIndicator(),
-                        )
-                      : Center(
-                          child: Text("Start a Conversation."),
-                        );
-                   }else {
-              if (chatSnapshot.hasData) {
-                final chatDocs = chatSnapshot.data!;
-                //final user = Provider.of<User?>(context);
-                return ListView.builder(
-                  controller: _scrollController, // Dodaj ScrollController
-                  reverse: true, // Reverse da bi najnovije bile na dnu
-                  itemCount: chatDocs.length,
-                  itemBuilder: (context, index) {
-                  Map chatData = chatDocs[index].data() as Map;
-                  Timestamp? messageTimestamp = chatData['timestamp'];
-
-                  print('time:');
-                  if (messageTimestamp != null){
-                    print(messageTimestamp.toDate());
-
-                  }
-
-                  // print(userLastMessageTimestamp?.toDate());
-                  // print(chatData['isRead']);
-                  //final message = _messages[index];
-return Padding(
-  padding: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 10.0),
-  child: Row(
-    mainAxisAlignment: chatData['senderId'] == adminId
-        ? MainAxisAlignment.start
-        : MainAxisAlignment.end,
-    children: [
-      ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.6, // maksimalna širina bubble-a
-        ),
-        child: IntrinsicWidth(
-          stepWidth: 1,
-          child: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: chatData['senderId'] == adminId
-                  ? Colors.orangeAccent[400]
-                  : Colors.green[800],
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              crossAxisAlignment: chatData['senderId'] == adminId
-                  ? CrossAxisAlignment.start
-                  : CrossAxisAlignment.end,
-              children: [
-                if (chatData['thumbUrl'] != null || chatData['localImagePath'] != null)
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => Scaffold(
-                            backgroundColor: Colors.black,
-                            body: Center(
-                              child: InteractiveViewer(
-                                child: chatData['localImagePath'] != null
-                                    ? Image.file(File(chatData['localImagePath']))
-                                    : Image.network(chatData['imageUrl']),
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: chatData['localImagePath'] != null
-                          ? Image.file(
-                              File(chatData['localImagePath']),
-                              height: 200,
-                              fit: BoxFit.cover,
-                            )
-                          : chatData['thumbUrl'] != null
-                              ? CachedNetworkImage(
-                                  imageUrl: chatData['thumbUrl'],
-                                  height: 200,
-                                  fit: BoxFit.cover,
-                                  placeholder: (context, url) => Container(
-                                    height: 200,
-                                    color: Colors.grey[300],
-                                    child: const Center(
-                                        child: CircularProgressIndicator()),
-                                  ),
-                                  errorWidget: (context, url, error) => Container(
-                                    height: 200,
-                                    color: Colors.grey,
-                                    child: const Icon(Icons.error,
-                                        color: Colors.red),
-                                  ),
-                                )
-                              : Container(
-                                  height: 200,
-                                  color: Colors.grey[300],
-                                  child: const Icon(Icons.image,
-                                      color: Colors.white, size: 50),
-                                ),
-                    ),
-                  ),
-                if (chatData['message']?.isNotEmpty ?? false) ...[
-                  if (chatData['thumbUrl'] != null ||
-                      chatData['localImagePath'] != null)
-                    const SizedBox(height: 8),
-                  Text(
-                    chatData['message'],
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    ],
-  ),
-);
-
-              }
-            );
-              } else {
-                return CircularProgressIndicator();
-              }
-            }
-                })
-          
-            
-            
-          ),
-          // Input for sending messages
-
-SafeArea(
-  child: Container(
-    margin: const EdgeInsets.only(bottom: 8),
-    child: Opacity(
-      opacity: currentUser!.isPremium ? 1.0 : 0.6,
-      child: AbsorbPointer(
-        absorbing: !currentUser!.isPremium,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              Expanded(
-                child: generateTextField(
-                  labelText: currentUser!.isPremium
-                      ? 'Unesite poruku'
-                      : 'Niste premium korisnik',
-                  controller: messageTextController,
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.image),
-                color: currentUser!.isPremium ? Colors.blueGrey : Colors.grey,
-                onPressed: _pickImage,
-              ),
-              IconButton(
-                icon: const Icon(Icons.send),
-                color: currentUser!.isPremium ? Colors.orange : Colors.grey,
-                onPressed: () {
-                  _sendMessage(messageText: messageTextController.text);
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  ),
-)
-
+          Expanded(child: _buildMessagesList()),
+          _buildMessageInput(),
         ],
       ),
+    );
+  }
+
+  Widget _buildLoadingScreen() {
+    return Scaffold(
+      appBar: AppBar(title: const Text('')),
+      body: const Center(child: CircularProgressIndicator()),
+    );
+  }
+
+  Widget _buildErrorScreen() {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Fruit Care Pro')),
+      body: const Center(child: Text('Chat ID nije dostupan.')),
+    );
+  }
+
+  Widget _buildAvatar(String? thumbUrl) {
+    return Container(
+      width: 50,
+      height: 50,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: Colors.brown[300] ?? Colors.brown,
+          width: 2,
+        ),
+      ),
+      child: ClipOval(
+        child: AspectRatio(
+          aspectRatio: 1,
+          child: _buildAvatarContent(thumbUrl),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAvatarContent(String? thumbUrl) {
+    if (thumbUrl == null) {
+      return const Icon(Icons.person);
+    }
+
+    return CachedNetworkImage(
+      imageUrl: thumbUrl,
+      fit: BoxFit.cover,
+      placeholder: (_, __) => const Icon(Icons.person),
+      errorWidget: (_, __, ___) => const Icon(Icons.person),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar() {
+    return PreferredSize(
+      preferredSize: const Size.fromHeight(kToolbarHeight + 3),
+      child: Container(
+        color: Colors.green[800],
+        child: Column(
+          children: [
+            AppBar(
+              elevation: 0,
+              backgroundColor: Colors.transparent,
+              title: _buildAppBarTitle(),
+            ),
+            Container(height: 3, color: Colors.brown[500]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAppBarTitle() {
+    return Row(
+      children: [
+        const SizedBox(width: 30),
+        GestureDetector(
+          onTap: () => _navigateToUserDetails(_userId),
+          child: _buildAvatar(_admin?.thumbUrl),
+        ),
+        const SizedBox(width: 8),
+        GestureDetector(
+          onTap: () => _navigateToUserDetails(_userId),
+          child: Text(
+            'Admin',
+            style: const TextStyle(color: Colors.white, fontSize: 22),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMessagesList() {
+  return StreamBuilder<List<DocumentSnapshot>>(
+    stream: _listenToChatsRealTime(),
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return const Center(child: CircularProgressIndicator());
+      }
+
+      if (!snapshot.hasData || snapshot.data!.isEmpty) {
+        return const Center(child: Text('Započnite razgovor.'));
+      }
+
+      final messages = snapshot.data!;
+
+      return ListView.builder(
+        controller: _scrollController,
+        reverse: true,
+        itemCount: messages.length,
+        itemBuilder: (context, index) {
+          final messageDoc = messages[index];
+          final messageData = messageDoc.data() as Map<String, dynamic>;
+          
+          // 🔥 Proveri da li treba prikazati datum separator
+          final showDateSeparator = _shouldShowDateSeparator(
+            messages,
+            index,
+          );
+
+          return Column(
+            children: [
+              // Prikaži datum separator ako je potrebno
+              if (showDateSeparator)
+                DateSeparator(
+                  timestamp: messageData['timestamp'] as Timestamp?,
+                ),
+              
+              // Prikaži poruku
+              _ChatBubble(
+                messageData: messageData,
+                isCurrentUser: messageData['senderId'] != _adminId,
+                adminId: _adminId,
+                onImageTap: () => _navigateToImageViewer(
+                    messageData['imageUrl'] ?? messageData['thumbUrl'],
+                    messageData['localImagePath'],
+                    messageData['messageId'], // 🔥 Prosleđuj messageId
+                ),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
+
+bool _shouldShowDateSeparator(List<DocumentSnapshot> messages, int index) {
+  // Uvek prikaži separator za poslednju (najstariju) poruku
+  if (index == messages.length - 1) return true;
+
+  final currentMessage = messages[index].data() as Map<String, dynamic>;
+  final nextMessage = messages[index + 1].data() as Map<String, dynamic>;
+
+  final currentTimestamp = currentMessage['timestamp'] as Timestamp?;
+  final nextTimestamp = nextMessage['timestamp'] as Timestamp?;
+
+  if (currentTimestamp == null || nextTimestamp == null) return false;
+
+  final currentDate = currentTimestamp.toDate();
+  final nextDate = nextTimestamp.toDate();
+
+  // Prikaži separator ako su poruke iz različitih dana
+  return !_isSameDay(currentDate, nextDate);
+}
+
+// 🔥 Helper metoda - proveri da li su isti dan
+bool _isSameDay(DateTime date1, DateTime date2) {
+  return date1.year == date2.year &&
+      date1.month == date2.month &&
+      date1.day == date2.day;
+}
+  Widget _buildMessageInput() {
+    final isPremium = _currentUser?.isPremium ?? false;
+
+    return SafeArea(
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        child: Opacity(
+          opacity: isPremium ? 1.0 : 0.6,
+          child: AbsorbPointer(
+            absorbing: !isPremium,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: generateTextField(
+                      labelText: isPremium
+                          ? 'Unesite poruku'
+                          : 'Niste premium korisnik',
+                      controller: _messageController,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.image),
+                    color: isPremium ? Colors.brown[500] : Colors.grey,
+                    onPressed: isPremium ? _sendImageMessage : null,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.send),
+                    color: isPremium ? Colors.brown[500] : Colors.grey,
+                    onPressed: isPremium ? _sendTextMessage : null,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ==================== EXTRACTED WIDGETS ====================
+
+class _ChatBubble extends StatelessWidget {
+  final Map<String, dynamic> messageData;
+  final bool isCurrentUser;
+  final VoidCallback? onImageTap;
+  final String adminId;
+  const _ChatBubble({
+    required this.messageData,
+    required this.isCurrentUser,
+    required this.adminId,
+    this.onImageTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 10.0),
+      child: Row(
+        mainAxisAlignment:
+            isCurrentUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        children: [
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.8,
+              minWidth: MediaQuery.of(context).size.width * 0.2,
+            ),
+            child: IntrinsicWidth(
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: isCurrentUser ? Colors.green[600] : Colors.brown[500],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: isCurrentUser
+                      ? CrossAxisAlignment.end
+                      : CrossAxisAlignment.start,
+                  children: [
+                    if (_hasImage) _buildImage(),
+                    if (_hasText) ...[
+                      if (_hasImage) const SizedBox(height: 8),
+                      _buildText(),
+                    ],
+                    const SizedBox(height: 4),
+                    _buildTimestampWithStatus(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool get _hasImage =>
+      messageData['thumbUrl'] != null || messageData['localImagePath'] != null;
+
+  bool get _hasText => (messageData['message'] as String?)?.isNotEmpty ?? false;
+
+Widget _buildImage() {
+  final isUploading = messageData['isUploading'] ?? false;
+  final uploadFailed = messageData['uploadFailed'] ?? false;
+  final uploadProgress = (messageData['uploadProgress'] ?? 0.0) as double;
+  final hasThumb = messageData['thumbUrl'] != null;
+
+  // Prikaži loader SAMO ako nema thumbnail-a
+  if (isUploading && !hasThumb) {
+    return _buildUploadingImage(uploadProgress);
+  }
+
+  // Prikaži error SAMO ako nema ni thumb
+  if (uploadFailed && !hasThumb) {
+    return _buildFailedImage();
+  }
+
+  // Prikaži sliku BEZ mini loadera
+  return GestureDetector(
+    onTap: onImageTap,
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: _buildImageWidget(),
+    ),
+  );
+  
+  // ❌ UKLONI Stack sa mini loader-om
+}
+Widget _buildUploadingImage(double progress) {
+  final localPath = messageData['localImagePath'] as String?;
+  
+  return ClipRRect(
+    borderRadius: BorderRadius.circular(8),
+    child: SizedBox(
+      height: 200,
+      // ❌ UKLONI width: double.infinity jer si unutar IntrinsicWidth
+      child: Stack(
+        children: [
+          // Prikaži lokalnu sliku (blur)
+          if (localPath != null)
+            ColorFiltered(
+              colorFilter: ColorFilter.mode(
+                Colors.black.withOpacity(0.3),
+                BlendMode.darken,
+              ),
+              child: Image.file(
+                File(localPath),
+                height: 200,
+                fit: BoxFit.cover,
+              ),
+            )
+          else
+            Container(
+              height: 200,
+              color: Colors.grey[300],
+            ),
+          
+          // Loading overlay
+          Positioned.fill(
+            child: Container(
+              color: Colors.black38,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 50,
+                    height: 50,
+                    child: CircularProgressIndicator(
+                      value: progress > 0 ? progress : null,
+                      strokeWidth: 3,
+                      valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                      backgroundColor: Colors.white30,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    progress > 0 
+                      ? '${(progress * 100).toInt()}%'
+                      : 'Učitavanje...',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+// 🔥 Failed state - takođe ukloni width
+Widget _buildFailedImage() {
+  return Container(
+    height: 200,
+    // ❌ UKLONI width: double.infinity
+    decoration: BoxDecoration(
+      color: Colors.red[100],
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(Icons.error_outline, size: 48, color: Colors.red[700]),
+        const SizedBox(height: 8),
+        Text(
+          'Upload nije uspeo',
+          style: TextStyle(
+            color: Colors.red[700],
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextButton.icon(
+          onPressed: () {
+            // TODO: Implementiraj retry logiku
+            print('Retry upload');
+          },
+          icon: const Icon(Icons.refresh),
+          label: const Text('Pokušaj ponovo'),
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.red[700],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+Widget _buildImageWidget() {
+  final thumbUrl = messageData['thumbUrl'] as String?;
+  final localPath = messageData['localImagePath'] as String?;
+
+  // 🔥 Uvek prikaži samo THUMBNAIL u chat-u
+  if (thumbUrl != null) {
+    return CachedNetworkImage(
+      imageUrl: thumbUrl,
+      height: 200,
+      fit: BoxFit.cover,
+      errorWidget: (context, url, error) => _buildErrorWidget(),
+      fadeInDuration: const Duration(milliseconds: 300),
+    );
+  }
+
+  if (localPath != null) {
+    return Image.file(
+      File(localPath),
+      height: 200,
+      fit: BoxFit.cover,
+    );
+  }
+
+  return _buildDefaultImage();
+}
+
+  Widget _buildErrorWidget() {
+    return Container(
+      height: 200,
+      color: Colors.grey,
+      child: const Icon(Icons.error, color: Colors.red),
+    );
+  }
+
+  Widget _buildDefaultImage() {
+    return Container(
+      height: 200,
+      color: Colors.grey[300],
+      child: const Icon(Icons.image, color: Colors.white, size: 50),
+    );
+  }
+
+  Widget _buildTimestampWithStatus() {
+    final timestamp = messageData['timestamp'] as Timestamp?;
+    if (timestamp == null) return const SizedBox.shrink();
+
+    final time = timestamp.toDate();
+    final formattedTime =
+        '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          formattedTime,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.7),
+            fontSize: 11,
+          ),
+        ),
+        // Prikaži kukice samo za poruke trenutnog korisnika
+        if (isCurrentUser) ...[
+          const SizedBox(width: 4),
+          _buildReadStatusIcon(),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildReadStatusIcon() {
+    final readBy = messageData['readBy'] as Map<String, dynamic>? ?? {};
+
+    final isReadByOther = readBy.containsKey(adminId);
+
+    // Dve plave kukice ako je pročitano
+    if (isReadByOther) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.done_all,
+            size: 16,
+            color: Colors.blue[300], // Plava boja za pročitano
+          ),
+        ],
+      );
+    }
+    // Dve sive kukice ako je isporučeno ali ne pročitano
+    return Icon(
+      Icons.done_all,
+      size: 16,
+      color: Colors.white.withOpacity(0.6), // Siva za isporučeno
+    );
+  }
+
+
+  Widget _buildPlaceholder() {
+    return Container(
+      height: 200,
+      color: Colors.grey[300],
+      child: const Center(child: CircularProgressIndicator()),
+    );
+  }
+
+  Widget _buildText() {
+    return Text(
+      messageData['message'],
+      style: const TextStyle(color: Colors.white),
     );
   }
 }

@@ -1,12 +1,12 @@
-import 'package:bb_agro_portal/models/create_user.dart';
-import 'package:bb_agro_portal/models/fruit_type.dart';
-import 'package:bb_agro_portal/models/user_fruit_type.dart';
-import 'package:bb_agro_portal/screens/users_screen.dart';
-import 'package:bb_agro_portal/services/chat_service.dart';
-import 'package:bb_agro_portal/services/fruit_types_service.dart';
-import 'package:bb_agro_portal/services/user_service.dart';
+import 'package:fruit_care_pro/models/create_user.dart';
+import 'package:fruit_care_pro/models/create_user_result.dart';
+import 'package:fruit_care_pro/models/fruit_type.dart';
+import 'package:fruit_care_pro/models/user_fruit_type.dart';
+import 'package:fruit_care_pro/screens/users_screen.dart';
+import 'package:fruit_care_pro/services/fruit_types_service.dart';
+import 'package:fruit_care_pro/services/user_service.dart';
 import 'package:flutter/material.dart';
-import 'package:bb_agro_portal/shared_ui_components.dart';
+import 'package:fruit_care_pro/shared_ui_components.dart';
 
 class CreateAccountScreen extends StatefulWidget {
   const CreateAccountScreen({super.key});
@@ -16,69 +16,104 @@ class CreateAccountScreen extends StatefulWidget {
 }
 
 class _CreateAccountScreenState extends State<CreateAccountScreen> {
+  //Fruit Type Service to fetch all fruit types
   final FruitTypesService _fruitTypeService = FruitTypesService();
-  final ChatService _chatService = ChatService();
-  final TextEditingController _emailController = TextEditingController();
+
+  //User service for persisting user
+  final UserService _userService = UserService();
+
+  //---Controller for each input ---
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _repeteadPasswordController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneNumberController = TextEditingController();
   final TextEditingController _cityController = TextEditingController();
+  //---Controller for each input ---
 
-  final FocusNode _emailFocusNode = FocusNode();
+  //---FocusNode for each input ---
   final FocusNode _passwordFocusNode = FocusNode();
   final FocusNode _repeatedPasswordFocusNode = FocusNode();
   final FocusNode _phoneNumberFocusNode = FocusNode();
-  final FocusNode _NameFocusNode = FocusNode();
-  final FocusNode _CityFocusNode = FocusNode();
-
+  final FocusNode _nameFocusNode = FocusNode();
+  final FocusNode _cityFocusNode = FocusNode();
+  //---FocusNode for each input ---
   final _formKey = GlobalKey<FormState>();
-  final UserService _userService = UserService();
 
+  //Used for storing all fruit types fetched from database
   List<FruitType> fruitTypes = [];
+
+  //Currently selected fruit type - ID
   String? selectedFruitType;
+
+  //Currently entered number of threes
   final _numberOfTreesController = TextEditingController();
+
+  //List of selected fruit types
   List<UserFruitType> selectedFruits = <UserFruitType>[];
 
   Future<void> createNewAccount() async {
-    String? userId = await _userService.createNewUser(CreateUserParam(
+    CreateUserResult createUserResult =
+        await _userService.createNewUser(CreateUserParam(
       id: '',
       name: _nameController.text,
-      email: _nameController.text.toLowerCase().replaceAll(' ', '') + "@agrobb.com",
+      email: _nameController.text.toLowerCase().replaceAll(' ', '') +
+          "@fruitcarepro.com",
       password: _passwordController.text,
       city: _cityController.text,
       phone: _phoneNumberController.text,
       fruitTypes: selectedFruits,
     ));
-    print("Finished adding user");
-    print(userId);
-    if (userId != null)
-    {
-      for (var fruitType in selectedFruits) {
-        _chatService.addUserChat(fruitType.fruitTypeId, userId);
+
+    if (createUserResult.isFailed) {
+      String errorMessage =
+          'Došlo je do greške prilikom kreiranja novog naloga!';
+
+      if (createUserResult.notUniqueUsername) {
+        errorMessage = "Postoje korisnik sa istim korisničkim imenom !";
       }
 
-      String? adminId = await _userService.getAdminId();
-      if (adminId != null)
-      {
-        print("adminId " + adminId);
-        String privateChatId = await _generateChatId(adminId, userId);
-        print("privateChatId " + privateChatId);
-        await _chatService.createNewPrivateChat(privateChatId ,"Private chat");
-        await _chatService.addUserChat(privateChatId, userId);
-        await _chatService.addUserChat(privateChatId, adminId);
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (context) {
+          Future.delayed(const Duration(seconds: 3), () {
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            }
+          });
 
-      }
-      else
-      {
-        print('Failed to find admin');
-      }
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              side: BorderSide(color: Colors.red[800] ?? Colors.red, width: 3),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            content: Row(
+              children: [
+                const SizedBox(width: 10),
+                Flexible(child: Text(errorMessage)),
+              ],
+            ),
+          );
+        },
+      );
+
+      return;
     }
 
-     Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const UserListScreen()),
-        );
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const UserListScreen()),
+    );
+  }
+
+  List<FruitType> GetFruitTypes() {
+    final selectedFruitTypeIDs =
+        selectedFruits.map((e) => e.fruitTypeId).toSet();
+
+    List<FruitType> returnValue =
+        fruitTypes.where((e) => !selectedFruitTypeIDs.contains(e.id)).toList();
+
+    return returnValue;
   }
 
   @override
@@ -95,7 +130,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     if (value == null || value.isEmpty) {
       return 'Molimo unesite email';
     }
-    final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+    final emailRegex =
+        RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
     if (!emailRegex.hasMatch(value)) {
       return 'Unesite validan email';
     }
@@ -129,16 +165,6 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     return null;
   }
 
-  Future<String> _generateChatId(String user1Id ,String user2Id) async {
-      String generatedChatId = '';
-      if (user1Id.compareTo(user2Id) < 0) {
-          generatedChatId = 'chat_${user1Id}_$user2Id';
-        } else {
-          generatedChatId = 'chat_${user2Id}_$user1Id';
-        }
-
-      return generatedChatId;
-  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -151,9 +177,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
               AppBar(
                 elevation: 0,
                 backgroundColor: Colors.transparent,
-                title: Text('Dodavanje novog korisnika', style: TextStyle(color: Colors.white)),
+                title: Text('Dodavanje novog korisnika',
+                    style: TextStyle(color: Colors.white)),
               ),
-              Container(height: 3, color: Colors.orangeAccent[400]),
+              Container(height: 3, color: Colors.brown[500])
             ],
           ),
         ),
@@ -173,7 +200,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                 labelText: "Ime",
                 controller: _nameController,
                 iconData: Icons.person,
-                focusNode: _NameFocusNode,
+                focusNode: _nameFocusNode,
                 validator: nameValidator,
               ),
             ),
@@ -192,7 +219,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                 labelText: "Grad",
                 controller: _cityController,
                 iconData: Icons.location_city,
-                focusNode: _CityFocusNode,
+                focusNode: _cityFocusNode,
               ),
             ),
             Padding(
@@ -223,119 +250,161 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
             ),
             // Primer kako da koristiš u Row
 
-Padding(
-  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 0),
-  child: Row(
-    children: [
-      Expanded(
-        flex: 3,
-        child: SizedBox(
-          height: 50,  // ista visina kao i TextFormField
-          child: DropdownButtonFormField<String>(
-            isExpanded: true,
-            decoration: InputDecoration(
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: Colors.grey),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: Colors.green[800]!),
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            value: selectedFruitType,
-            hint: Text("Voćna vrsta", style: TextStyle(fontSize: 14)),
-            items: fruitTypes.map((fruit) {
-              return DropdownMenuItem<String>(
-                value: fruit.id,
-                child: Text(fruit.name, style: TextStyle(fontSize: 14)),
-              );
-            }).toList(),
-            onChanged: (value) {
-              setState(() {
-                selectedFruitType = value;
-              });
-            },
-          ),
-        ),
-      ),
-      SizedBox(width: 10),
-      Expanded(
-        flex: 2,
-        child: SizedBox(
-          height: 50,  // isto
-          child: generateTextField(
-            labelText: "Br. st.",
-            controller: _numberOfTreesController,
-            height: 50, // prosledi height
-          ),
-        ),
-      ),
-      SizedBox(width: 10),
-      Container(
-        height: 50,  // da dugme bude iste visine ako želiš
-        decoration: BoxDecoration(
-          color: Colors.green[800],
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: IconButton(
-          onPressed: () {
-                        if (selectedFruitType != null && _numberOfTreesController.text.isNotEmpty) {
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: SizedBox(
+                      height: 50, // ista visina kao i TextFormField
+                      child: DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 12),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.grey),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.green[800]!),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        value: selectedFruitType,
+                        hint:
+                            Text("Voćna vrsta", style: TextStyle(fontSize: 14)),
+                        items: GetFruitTypes().map((fruit) {
+                          return DropdownMenuItem<String>(
+                            value: fruit.id,
+                            child: Text(fruit.name,
+                                style: TextStyle(fontSize: 14)),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            selectedFruitType = value;
+                          });
+                        },
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: SizedBox(
+                      height: 50, // isto
+                      child: generateTextField(
+                        labelText: "Br. st.",
+                        controller: _numberOfTreesController,
+                        height: 50, // prosledi height
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 10),
+                  Container(
+                    height: 50, // da dugme bude iste visine ako želiš
+                    decoration: BoxDecoration(
+                      color: Colors.green[800],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: IconButton(
+                      onPressed: () {
+                        if (selectedFruitType != null &&
+                            _numberOfTreesController.text.isNotEmpty) {
                           setState(() {
                             selectedFruits.add(UserFruitType(
                               fruitTypeId: selectedFruitType!,
                               fruitTypeName: fruitTypes
-                                  .firstWhere((fruit) => fruit.id == selectedFruitType!)
+                                  .firstWhere(
+                                      (fruit) => fruit.id == selectedFruitType!)
                                   .name,
-                              numberOfTrees: int.parse(_numberOfTreesController.text),
+                              numberOfTrees:
+                                  int.parse(_numberOfTreesController.text),
                             ));
                             _numberOfTreesController.clear();
                             selectedFruitType = null;
                           });
                         }
                       },
-          icon: Icon(Icons.add, color: Colors.white),
-        ),
-      ),
-    ],
-  ),
-),
+                      icon: Icon(Icons.add, color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 10),
               child: ListView.builder(
                 shrinkWrap: true,
-                physics: NeverScrollableScrollPhysics(),
+                physics: const NeverScrollableScrollPhysics(),
                 itemCount: selectedFruits.length,
                 itemBuilder: (context, index) {
                   final fruit = selectedFruits[index];
-                  bool isEven = index % 2 == 0;
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: isEven ? Colors.grey[200] : Colors.white,
-                      border: Border.all(color: Colors.orangeAccent[400] ?? Colors.orange, width: 1),
-                    ),
-                    child: ListTile(
-                      contentPadding: EdgeInsets.symmetric(vertical: 0, horizontal: 20),
-                      title: Text(
-                        fruit.fruitTypeName,
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  final isEven = index % 2 == 0;
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: isEven ? Colors.grey[100] : Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.green[800]!,
+                          width: 1,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            offset: const Offset(0, 2),
+                            blurRadius: 4,
+                          ),
+                        ],
                       ),
-                      subtitle: Text(
-                        "Broj stabala: ${fruit.numberOfTrees}",
-                        style: TextStyle(fontSize: 12, color: Colors.green[700]),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 5,
+                          horizontal: 20,
+                        ),
+                        title: Text(
+                          fruit.fruitTypeName,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        subtitle: Text(
+                          "Broj stabala: ${fruit.numberOfTrees}",
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.green[800],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+
+                        // 🔥 OVDE DODAJEMO X dugme
+                        trailing: IconButton(
+                          icon: const Icon(Icons.close, color: Colors.red),
+                          onPressed: () {
+                            setState(() {
+                              selectedFruits.removeAt(index);
+                            });
+                          },
+                        ),
                       ),
                     ),
                   );
                 },
               ),
             ),
+
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
               child: generateButton(
                 text: "Završi dodavanje",
                 onPressed: () {
@@ -350,4 +419,4 @@ Padding(
       ),
     );
   }
-  }
+}

@@ -1,69 +1,136 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:bb_agro_portal/models/fruit_type.dart';
+import 'package:fruit_care_pro/models/fruit_type.dart';
 
 class FruitTypesService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  Stream<List<FruitType>> getFruitTypes(List<String> fruitTypeIds) {
-    return _db
-        .collection('fruit_types')
-        .where(FieldPath.documentId, whereIn: fruitTypeIds)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => FruitType.fromFirestore(doc.data(), doc.id))
-          .toList();
-    });
+  Stream<List<FruitType>> retrieveAllFruitTypes() {
+    try {
+      return _db.collection('fruit_types').snapshots().map((snapshot) {
+        return snapshot.docs.map((doc) {
+          var data = doc.data();
+          return FruitType.fromFirestore(data, doc.id);
+        }).toList();
+      });
+    } catch (e) {
+      return Stream.value([]);
+    }
   }
 
-  Future<void> deleteFruitType(String id) async {
+  Future<bool> deleteFruitType(String fruitTypeId) async {
     try {
-      // Brisanje dokumenta iz kolekcije 'fruit_types' na osnovu ID-a
-      await _db.collection('fruit_types').doc(id).delete();
-      print("Voćna vrsta uspešno obrisana.");
+      await _db.runTransaction((transaction) async {
+        final fruitRef = _db.collection("fruit_types").doc(fruitTypeId);
+
+        final userQuery = await _db
+            .collection("user_2_fruittypes")
+            .where("fruitId", isEqualTo: fruitTypeId)
+            .get();
+
+        for (var doc in userQuery.docs) {
+          transaction.delete(doc.reference);
+        }
+
+        final chatQuery = await _db
+            .collection("chats")
+            .where("id", isEqualTo: fruitTypeId)
+            .get();
+
+        for (var doc in chatQuery.docs) {
+          transaction.delete(doc.reference);
+        }
+        transaction.delete(fruitRef);
+      });
+
+      return true;
     } catch (e) {
-      print("Greška prilikom brisanja voćne vrste: $e");
-      // Možete obraditi greške i obavestiti korisnika
+      return false;
     }
   }
 
   // // Metoda za dodavanje nove voćne vrste
-  Future<String> addFruitType(FruitType ft) async {
-  print("Adding fruit type");
-
-  DocumentReference docRef = await _db.collection('fruit_types').add({
-    'name': ft.name,
-    'numberOfTreesPerAre': ft.numberOfTreesPerAre,
-  });
-
-  return docRef.id;
-}
-  // Metoda za ažuriranje voćne vrste u Firestore
-  Future<void> updateFruitType(FruitType fruitType) async {
+  Future<String> addFruitType(FruitType ft, String adminId) async {
     try {
+      await _db.runTransaction((transaction) async {
+
+        ft.id = _db.collection('fruit_types').doc().id;
+
+        DocumentReference fruitTypesRef =
+            _db.collection('fruit_types').doc(ft.id);
+        //Persist user
+        transaction.set(fruitTypesRef, {
+          'name': ft.name,
+          'numberOfTreesPerAre': ft.numberOfTreesPerAre,
+        });
+
+        DocumentReference fruitTypeChatRef =
+            _db.collection('chats').doc(ft.id);
+        transaction.set(fruitTypeChatRef, {
+          'type': 'group',
+          'name': ft.name,
+          'lastMessage': {  
+            'text': '',
+            'timestamp': FieldValue.serverTimestamp(),
+            'senderId': '',
+            'readBy': {},
+          },
+          'lastMessageTimestamp': FieldValue.serverTimestamp(),
+          'members': [],
+          'memberIds' : [adminId]
+        });
+
+        DocumentReference fruitTypeChatUserMemberRef = _db
+            .collection('chats')
+            .doc(ft.id)
+            .collection('members')
+            .doc(adminId);
+
+        transaction.set(
+            fruitTypeChatUserMemberRef,
+            {
+              'userId': adminId,
+              'lastMessage': {
+                'message': "-", // inicijalno prazno
+                'timestamp': FieldValue.serverTimestamp(),
+                'read': false, // inicijalno nije pročitao
+              },
+              'memberSince': FieldValue.serverTimestamp(),
+              'messagesVisibleFrom': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true));
+      });
+
+      return ft.id;
+    } catch (e) {
+      return "";
+    }
+  }
+
+  // Metoda za ažuriranje voćne vrste u Firestore
+  Future<bool> updateFruitType(FruitType fruitType) async {
+    try {
+
+      await _db.runTransaction((transaction) async {
+
       // Ažuriramo voćnu vrstu u kolekciji 'fruit_types' pomoću ID-a
-      await _db.collection('fruit_types').doc(fruitType.id).update({
+
+      DocumentReference fruitTypeRef =
+            _db.collection('fruit_types').doc(fruitType.id);
+
+      transaction.update(fruitTypeRef, {
         'name': fruitType.name,
         'numberOfTreesPerAre': fruitType.numberOfTreesPerAre,
       });
 
-      print("Voćna vrsta uspešno ažurirana.");
+      DocumentReference fruitTypeChatRef =
+            _db.collection('chats').doc(fruitType.id);
+        transaction.update(fruitTypeChatRef, {
+          'name': fruitType.name
+        });
+      });
+      return true;
     } catch (e) {
-      print("Greška prilikom ažuriranja voćne vrste: $e");
+      return false;
     }
-  }
-
-  Stream<List<FruitType>> retrieveAllFruitTypes() {
-    return _db
-        .collection('fruit_types') // Uzimamo kolekciju "fruit_types"
-        .snapshots() // Praćenje promena u realnom vremenu
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        // Ovde osiguravamo da data() vrati Map<String, dynamic>
-        var data = doc.data();
-        // Pretvaranje podataka u FruitType objekat
-        return FruitType.fromFirestore(data, doc.id);
-      }).toList(); // Vraćamo listu svih FruitType objekata
-    });
   }
 }

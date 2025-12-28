@@ -1,4 +1,4 @@
-import 'package:bb_agro_portal/models/user_fruit_type.dart';
+import 'package:fruit_care_pro/models/user_fruit_type.dart';
 
 class CreateUserParam {
   final String id;

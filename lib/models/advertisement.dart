@@ -1,7 +1,7 @@
-import 'package:bb_agro_portal/models/user_fruit_type.dart';
 
 class Advertisement {
   final String id;
+  final String categoryRefId;
   final String name;
   final String description;
   final String url;
@@ -12,6 +12,7 @@ class Advertisement {
   final String localImagePath;
   Advertisement(
       {required this.id,
+      required this.categoryRefId,
       required this.name,
       required this.description,
       required this.url,
@@ -25,6 +26,7 @@ class Advertisement {
     return Advertisement(
       id: documentId,
       name: data['name'] ?? '',
+      categoryRefId: data['categoryRefId'] ?? '',
       description: data['description'] ?? '',
       url: data['url'] ?? '',
       imageUrl: data['imageUrl'] ?? '',

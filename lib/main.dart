@@ -1,24 +1,29 @@
-import 'package:bb_agro_portal/firebase_options.dart';
-import 'package:bb_agro_portal/screens/admin_private_chat_screen.dart';
-import 'package:bb_agro_portal/screens/change_password_screen.dart';
-import 'package:bb_agro_portal/screens/change_user_data_screen.dart';
-import 'package:bb_agro_portal/screens/message_info.dart';
-import 'package:bb_agro_portal/screens/user_private_chat_screen.dart';
-import 'package:bb_agro_portal/screens/group_chat_screen.dart';
+import 'package:fruit_care_pro/firebase_options.dart';
+import 'package:fruit_care_pro/screens/admin_private_chat_screen.dart';
+import 'package:fruit_care_pro/screens/change_password_screen.dart';
+import 'package:fruit_care_pro/screens/change_user_data_screen.dart';
+import 'package:fruit_care_pro/screens/message_info.dart';
+import 'package:fruit_care_pro/screens/user_private_chat_screen.dart';
+import 'package:fruit_care_pro/screens/group_chat_screen.dart';
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
-import 'package:bb_agro_portal/screens/login_screen.dart';
-import 'package:bb_agro_portal/screens/admin_main_screen.dart';
-import 'package:bb_agro_portal/screens/user_main_screen.dart';
-import 'package:bb_agro_portal/models/user.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:fruit_care_pro/screens/login_screen.dart';
+import 'package:fruit_care_pro/screens/admin_main_screen.dart';
+import 'package:fruit_care_pro/screens/user_main_screen.dart';
+import 'package:fruit_care_pro/models/user.dart';
 import 'package:provider/provider.dart';
-import 'package:bb_agro_portal/user_notifier.dart';
+import 'package:fruit_care_pro/user_notifier.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  await Future.delayed(Duration(milliseconds: 500));
+  // Omogući Crashlytics slanje podataka
+  await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(true);
+
   runApp(ChangeNotifierProvider(
       create: (_) => UserNotifier(),  // instanca UserNotifier-a
       child: MyApp(),                 // root widget aplikacije
@@ -35,8 +40,8 @@ class MyApp extends StatelessWidget {
       routes: {
         '/': (context) => LoginScreen(),
         '/login': (context) => LoginScreen(),
-        '/admin': (context) => AdminMainScreen(adminUser: ModalRoute.of(context)?.settings.arguments as AppUser?),
-        '/user': (context) => UserMainScreen(appUser: ModalRoute.of(context)?.settings.arguments as AppUser?),
+        '/admin': (context) => AdminMainScreen(),
+        '/user': (context) => UserMainScreen(),
         '/change-password': (context) => ChangePasswordScreen(appUser: ModalRoute.of(context)?.settings.arguments as AppUser?),
         '/admin-private-chat': (context) {
             final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;

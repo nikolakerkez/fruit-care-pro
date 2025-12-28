@@ -1,4 +1,4 @@
-import 'package:bb_agro_portal/models/user.dart';
+import 'package:fruit_care_pro/models/user.dart';
 
 class CurrentUserService {
   static final CurrentUserService _instance = CurrentUserService._internal();
@@ -15,6 +15,10 @@ class CurrentUserService {
     _currentUser = user;
   }
 
+   void clearUser() {
+    _currentUser = null;
+    // Ako imaš SharedPreferences ili nešto drugo, očisti i to
+  }
   AppUser? get currentUser => _currentUser;
 
   bool get isAdmin => _currentUser?.isAdmin ?? false;

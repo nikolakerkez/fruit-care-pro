@@ -1,19 +1,20 @@
 import 'dart:io';
 
-import 'package:bb_agro_portal/models/advertisement.dart';
-import 'package:bb_agro_portal/models/create_user.dart';
-import 'package:bb_agro_portal/models/fruit_type.dart';
-import 'package:bb_agro_portal/models/user_fruit_type.dart';
-import 'package:bb_agro_portal/screens/advertisements_screen.dart';
-import 'package:bb_agro_portal/screens/users_screen.dart';
-import 'package:bb_agro_portal/services/advertisement_service.dart';
-import 'package:bb_agro_portal/services/chat_service.dart';
-import 'package:bb_agro_portal/services/documents_service.dart';
-import 'package:bb_agro_portal/services/fruit_types_service.dart';
-import 'package:bb_agro_portal/services/user_service.dart';
+import 'package:fruit_care_pro/models/advertisement.dart';
+import 'package:fruit_care_pro/models/create_user.dart';
+import 'package:fruit_care_pro/models/fruit_type.dart';
+import 'package:fruit_care_pro/models/user_fruit_type.dart';
+import 'package:fruit_care_pro/screens/advertisement_categories_screen.dart';
+import 'package:fruit_care_pro/screens/advertisements_screen.dart';
+import 'package:fruit_care_pro/screens/users_screen.dart';
+import 'package:fruit_care_pro/services/advertisement_service.dart';
+import 'package:fruit_care_pro/services/chat_service.dart';
+import 'package:fruit_care_pro/services/documents_service.dart';
+import 'package:fruit_care_pro/services/fruit_types_service.dart';
+import 'package:fruit_care_pro/services/user_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:bb_agro_portal/shared_ui_components.dart';
+import 'package:fruit_care_pro/shared_ui_components.dart';
 import 'package:image_picker/image_picker.dart';
 
 class ChangeAdvertisementScreen extends StatefulWidget {
@@ -42,6 +43,7 @@ class ChangeAdvertisementState extends State<ChangeAdvertisementScreen> {
   Future<void> updateAdvertisement() async {
     await _advertisementService.UpdateAdvertisement(Advertisement(
       id: widget.advertisement.id,
+      categoryRefId: "",
       imageUrl: imageUrl!,
       thumbUrl: thumbUrl!,
       imagePath: imagePath!,
@@ -54,7 +56,7 @@ class ChangeAdvertisementState extends State<ChangeAdvertisementScreen> {
 
      Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => const AdvertisementsScreen()),
+          MaterialPageRoute(builder: (context) => const AdvertisementCategoriesScreen()),
         );
   }
 
@@ -121,7 +123,7 @@ class ChangeAdvertisementState extends State<ChangeAdvertisementScreen> {
                 backgroundColor: Colors.transparent,
                 title: Text('Izmena reklame', style: TextStyle(color: Colors.white)),
               ),
-              Container(height: 3, color: Colors.orangeAccent[400]),
+              Container(height: 3, color: Colors.brown[500]),
             ],
           ),
         ),
@@ -136,7 +138,7 @@ class ChangeAdvertisementState extends State<ChangeAdvertisementScreen> {
       decoration: BoxDecoration(
         shape: BoxShape.rectangle,
         border: Border.all(
-          color: Colors.orangeAccent[600] ?? Colors.orange, // boja border-a
+          color: Colors.brown[500] ?? Colors.brown, // boja border-a
           width: 2, // debljina border-a
         ),
       ),

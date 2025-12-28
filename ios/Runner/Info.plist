@@ -2,10 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Bb Agro Portal</string>
+	<string>${PRODUCT_NAME}</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -13,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>bb_agro_portal</string>
+	<string>FruitCarePro</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -23,6 +25,14 @@
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Potrebna nam je pristup kameri da biste mogli da slikate</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Potrebna nam je dozvola za dodavanje slika u galeriju</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Potrebna nam je pristup galeriji da biste mogli da šaljete slike</string>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
@@ -41,20 +51,5 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>CADisableMinimumFrameDurationOnPhone</key>
-	<true/>
-	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/>
-<!-- Pristup foto galeriji -->
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Potrebna nam je pristup galeriji da biste mogli da šaljete slike</string>
-
-	<!-- Pristup kameri -->
-	<key>NSCameraUsageDescription</key>
-	<string>Potrebna nam je pristup kameri da biste mogli da slikate</string>
-
-	<!-- Pristup dodacima (ako koristite iOS 14+) -->
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Potrebna nam je dozvola za dodavanje slika u galeriju</string>
 </dict>
 </plist>

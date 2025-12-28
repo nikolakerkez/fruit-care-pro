@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:bb_agro_portal/services/fruit_types_service.dart';
+import 'package:fruit_care_pro/services/fruit_types_service.dart';
 
 class UserFruitTypes extends StatefulWidget {
   const UserFruitTypes({super.key});

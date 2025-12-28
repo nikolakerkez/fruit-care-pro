@@ -1,4 +1,4 @@
-name: bb_agro_portal
+name: fruit_care_pro
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -41,11 +41,16 @@ dependencies:
   provider: ^6.0.5
   timeago: ^3.7.1
   cached_network_image: ^3.2.3
+  firebase_crashlytics: ^3.5.6
+  cloud_functions: ^4.5.0
+  firebase_messaging: ^14.7.9 
+  flutter_local_notifications: ^16.3.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
+  launcher_name: ^1.0.2
+  
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
   # activated in the `analysis_options.yaml` file located at the root of your
@@ -57,6 +62,10 @@ dev_dependencies:
 # following page: https://dart.dev/tools/pub/pubspec
 
 # The following section is specific to Flutter packages.
+
+launcher_name:
+  default: "Fruit Care Pro"
+
 flutter:
 
   # The following line ensures that the Material Icons font is

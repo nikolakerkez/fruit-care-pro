@@ -1,12 +1,14 @@
-import 'package:bb_agro_portal/admin_fruit_types_board.dart';
-import 'package:bb_agro_portal/models/user.dart';
-import 'package:bb_agro_portal/services/user_service.dart';
-import 'package:bb_agro_portal/screens/create_account_screen.dart';
+import 'package:fruit_care_pro/screens/fruit_types_screen.dart';
+import 'package:fruit_care_pro/models/user.dart';
+import 'package:fruit_care_pro/services/user_service.dart';
+import 'package:fruit_care_pro/screens/create_account_screen.dart';
+import 'package:fruit_care_pro/shared_ui_components.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:bb_agro_portal/screens/user_details_screen.dart';
-import 'package:bb_agro_portal/screens/admin_main_screen.dart';
-import 'package:bb_agro_portal/current_user_service.dart';
-import 'package:bb_agro_portal/screens/user_main_screen.dart';
+import 'package:fruit_care_pro/widgets/user_details_screen.dart';
+import 'package:fruit_care_pro/screens/admin_main_screen.dart';
+import 'package:fruit_care_pro/current_user_service.dart';
+import 'package:fruit_care_pro/screens/user_main_screen.dart';
 
 class UserListScreen extends StatefulWidget {
   const UserListScreen({super.key});
@@ -16,10 +18,18 @@ class UserListScreen extends StatefulWidget {
 }
 
 class _UserListScreenState extends State<UserListScreen> {
+  //List of all users
   List<AppUser> users = [];
+
+  //List of users based on search criteria
   List<AppUser> filteredUsers = [];
-  final UserService _userService = UserService();
+
+  //Text controllers for searching users
   final TextEditingController _searchController = TextEditingController();
+
+  //Main service for searching users and execute actions
+  final UserService _userService = UserService();
+
   final user = CurrentUserService.instance.currentUser;
 
   @override
@@ -37,7 +47,7 @@ class _UserListScreenState extends State<UserListScreen> {
       users = dbUsers;
       filteredUsers = dbUsers; // Initially, show all users
     });
-    }
+  }
 
   // Filter users based on search input
   void _filterUsers() {
@@ -51,58 +61,88 @@ class _UserListScreenState extends State<UserListScreen> {
     });
   }
 
-  Future activateUser(AppUser currentUser) async
-  {
-      await _userService.activateUser(currentUser.id);
-      setState(() {
-            currentUser.isActive = true;
-      });
+  Future activateUser(AppUser currentUser) async {
+    bool isActionExecuted = await _userService.activateUser(currentUser.id);
+
+    if (!mounted) return;
+
+    if (!isActionExecuted) {
+      showErrorDialog(context, "Došlo je do greške.");
+      return;
+    }
+
+    setState(() {
+      currentUser.isActive = true;
+    });
   }
 
-  Future deactivateUser(AppUser currentUser) async
-  {
-    await _userService.deactivateUser(currentUser.id);
-      setState(() {
-            currentUser.isActive = false;
-      });
+  Future deactivateUser(AppUser currentUser) async {
+    bool isActionExecuted = await _userService.deactivateUser(currentUser.id);
+
+    if (!mounted) return;
+
+    if (!isActionExecuted) {
+      showErrorDialog(context, "Došlo je do greške.");
+
+      return;
+    }
+    setState(() {
+      currentUser.isActive = false;
+    });
   }
 
-Future setPremiumFlag(AppUser currentUser) async
-  {
-      await _userService.setPremiumFlag(currentUser.id);
-      setState(() {
-            currentUser.isPremium = true;
-      });
+  Future setPremiumFlag(AppUser currentUser) async {
+    bool isActionExecuted = await _userService.setPremiumFlag(currentUser.id);
+
+    if (!mounted) return;
+
+    if (!isActionExecuted) {
+      showErrorDialog(context, "Došlo je do greške.");
+
+      return;
+    }
+    setState(() {
+      currentUser.isPremium = true;
+    });
   }
 
-  Future removePremiumFlag(AppUser currentUser) async
-  {
-    await _userService.removePremiumFlag(currentUser.id);
-      setState(() {
-            currentUser.isPremium = false;
-      });
+  Future removePremiumFlag(AppUser currentUser) async {
+    bool isActionExecuted =
+        await _userService.removePremiumFlag(currentUser.id);
+
+    if (!mounted) return;
+
+    if (!isActionExecuted) {
+      showErrorDialog(context, "Došlo je do greške.");
+
+      return;
+    }
+
+    setState(() {
+      currentUser.isPremium = false;
+    });
   }
+
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
   }
 
-void _onItemTapped(int index) {
-
+  void _onItemTapped(int index) {
     switch (index) {
       case 0:
-            if (user?.isAdmin??false)
-            {
-              Navigator.push(
-                context, MaterialPageRoute(builder: (context) => AdminMainScreen(adminUser: user)));
-            }
-            else
-            {
-              print(user?.name);
-              Navigator.push(
-                context, MaterialPageRoute(builder: (context) => UserMainScreen(appUser: user)));
-            }
+        if (user?.isAdmin ?? false) {
+          Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => AdminMainScreen()));
+        } else {
+          Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => UserMainScreen()));
+        }
         break;
       case 1:
         Navigator.push(
@@ -122,10 +162,15 @@ void _onItemTapped(int index) {
           MaterialPageRoute(builder: (context) => const UserListScreen()),
         );
         break;
+       case 4:
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => UserDetailsScreen(userId: user?.id))
+        );
+        break;
     }
   }
 
-  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -146,15 +191,15 @@ void _onItemTapped(int index) {
                   IconButton(
                     icon: Icon(Icons.add, color: Colors.white),
                     onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => CreateAccountScreen()));
+                      Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => CreateAccountScreen()));
                     },
                   ),
                 ],
               ),
               Container(
                 height: 3,
-                color: Colors.orangeAccent[400],
+                color: Colors.brown[500] ?? Colors.brown,
               ),
             ],
           ),
@@ -170,6 +215,27 @@ void _onItemTapped(int index) {
                 labelText: 'Pretraži korisnike',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.search),
+                labelStyle: TextStyle(
+                  color: Colors.grey, // boja kada nije fokus
+                ),
+                floatingLabelStyle: TextStyle(
+                  color: Colors.brown[500], // boja kada je fokus
+                  fontWeight: FontWeight.bold,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: Colors.grey, // boja kada nije fokus
+                    width: 2,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: Colors.brown[500]!, // boja kada je fokus
+                    width: 2,
+                  ),
+                ),
               ),
             ),
           ),
@@ -181,25 +247,52 @@ void _onItemTapped(int index) {
                 final user = filteredUsers[index];
 
                 return ListTile(
-                  leading: const Icon(Icons.person),
+                  leading: Container(
+                    width: 48,
+                    height: 48, // isti width i height → kvadrat
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.brown[300] ?? Colors.brown,
+                        width: 2,
+                      ),
+                    ),
+                    child: ClipOval(
+                      child: AspectRatio(
+                          aspectRatio: 1,
+                          child: user.thumbUrl != null
+                              ? CachedNetworkImage(
+                                  imageUrl: user.thumbUrl!,
+                                  fit: BoxFit.cover,
+                                  placeholder: (context, url) => Image.asset(
+                                      'assets/images/default_avatar.jpg',
+                                      fit: BoxFit.cover),
+                                  errorWidget: (context, url, error) =>
+                                      Image.asset(
+                                          'assets/images/default_avatar.jpg',
+                                          fit: BoxFit.cover),
+                                )
+                              : Icon(Icons.person)),
+                    ),
+                  ),
+                  //leading: const Icon(Icons.person),
                   title: Row(
                     children: [
                       Expanded(child: Text(user.name)),
                       GestureDetector(
                         onTap: () {
-                          if (user.isPremium)
-                          {
+                          if (user.isPremium) {
                             removePremiumFlag(user);
-                          }
-                          else
-                          {
-                             setPremiumFlag(user);
+                          } else {
+                            setPremiumFlag(user);
                           }
                         },
                         child: Icon(
                           Icons.star,
-                          color: user.isPremium ? Colors.amber : Colors.grey,
-                          size: 20,
+                          color: user.isPremium
+                              ? Colors.brown[500] ?? Colors.brown
+                              : Colors.grey[400],
+                          size: 24,
                         ),
                       ),
                     ],
@@ -207,24 +300,26 @@ void _onItemTapped(int index) {
                   trailing: Switch(
                     value: user.isActive,
                     onChanged: (value) async {
-                      if (value)
-                      {
+                      if (value) {
                         activateUser(user);
-                      }
-                      else
-                      {
+                      } else {
                         deactivateUser(user);
                       }
-
                     },
-                    activeColor: Colors.green,
+                    activeColor: Colors.brown[500], // kružić kada je uključen
+                    inactiveThumbColor:
+                        Colors.brown[500], // kružić kada je isključen
+                    activeTrackColor:
+                        Colors.grey[300], // track kada je uključen
+                    inactiveTrackColor: Colors.grey[300],
                   ),
                   onTap: () {
                     // Navigate to the UserDetailsScreen with the selected userId
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => UserDetailsScreen(userId: user.id),
+                        builder: (context) =>
+                            UserDetailsScreen(userId: user.id),
                       ),
                     );
                   },
@@ -237,15 +332,12 @@ void _onItemTapped(int index) {
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           border: Border(
-            top: BorderSide(
-              color: Colors.orangeAccent[400] ?? Colors.orange,
-              width: 1.0,
-            ),
+            top: BorderSide(color: Colors.brown[500] ?? Colors.brown, width: 2),
           ),
         ),
         child: BottomNavigationBar(
           currentIndex: 1,
-          selectedItemColor: Colors.green[800],
+          selectedItemColor: Colors.brown[500],
           unselectedItemColor: Colors.grey,
           onTap: _onItemTapped,
           type: BottomNavigationBarType.fixed,
@@ -265,6 +357,10 @@ void _onItemTapped(int index) {
             BottomNavigationBarItem(
               icon: Icon(Icons.tv),
               label: 'Reklame',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.person_2_sharp),
+              label: 'Profil',
             ),
           ],
         ),

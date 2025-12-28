@@ -1,21 +1,21 @@
 {
   "project_info": {
-    "project_number": "443103224820",
-    "project_id": "bb-agro-portal",
-    "storage_bucket": "bb-agro-portal.firebasestorage.app"
+    "project_number": "782184044620",
+    "project_id": "fruit-care-pro",
+    "storage_bucket": "fruit-care-pro.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:443103224820:android:9c1a2f76c77341f88ecfa1",
+        "mobilesdk_app_id": "1:782184044620:android:ddbe608de0c7d6b1b53ce9",
         "android_client_info": {
-          "package_name": "com.example.bb_agro_portal"
+          "package_name": "rs.nikolakerkez.fruitcarepro"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyCH8msBo1BY5fIIfAf3CETtj2l6CVRN6JI"
+          "current_key": "AIzaSyAQSdS20ksta5G5EHKOCLPPwnLvJxAtj5k"
         }
       ],
       "services": {

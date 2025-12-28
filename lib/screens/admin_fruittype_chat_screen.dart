@@ -1,12 +1,12 @@
-import 'package:bb_agro_portal/models/user.dart';
+import 'package:fruit_care_pro/models/user.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:bb_agro_portal/models/message.dart';
-import 'package:bb_agro_portal/services/chat_service.dart';
-import 'package:bb_agro_portal/shared_ui_components.dart';
-import 'package:bb_agro_portal/services/user_service.dart';
+import 'package:fruit_care_pro/models/message.dart';
+import 'package:fruit_care_pro/services/chat_service.dart';
+import 'package:fruit_care_pro/shared_ui_components.dart';
+import 'package:fruit_care_pro/services/user_service.dart';
 import 'dart:async';
-import 'package:bb_agro_portal/screens/user_details_screen.dart';
+import 'package:fruit_care_pro/widgets/user_details_screen.dart';
 import 'message_info.dart';
 class AdminGroupChatScreen extends StatefulWidget {
   final String? userId;

@@ -1,301 +1,295 @@
-import 'package:bb_agro_portal/models/user.dart';
-import 'package:bb_agro_portal/screens/advertisements_screen.dart';
-import 'package:bb_agro_portal/services/chat_service.dart';
-import 'package:bb_agro_portal/services/user_service.dart';
+import 'package:fruit_care_pro/models/chat_item.dart';
+import 'package:fruit_care_pro/models/user.dart';
+import 'package:fruit_care_pro/screens/advertisement_categories_screen.dart';
+import 'package:fruit_care_pro/screens/private_chat_screen.dart';
+import 'package:fruit_care_pro/services/chat_service.dart';
+import 'package:fruit_care_pro/services/user_service.dart';
+import 'package:fruit_care_pro/shared_ui_components.dart';
+import 'package:fruit_care_pro/widgets/user_details_screen.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'users_screen.dart';
-import 'package:bb_agro_portal/admin_fruit_types_board.dart';
-import 'package:bb_agro_portal/current_user_service.dart';
-import 'package:bb_agro_portal/screens/user_main_screen.dart';
+import 'package:fruit_care_pro/screens/fruit_types_screen.dart';
+import 'package:fruit_care_pro/current_user_service.dart';
 
 class AdminMainScreen extends StatefulWidget {
-  final AppUser? adminUser;
-  const AdminMainScreen({super.key, this.adminUser});
+  const AdminMainScreen({super.key});
 
   @override
-  _AdminMainScreenState createState() => _AdminMainScreenState();
+  State<AdminMainScreen> createState() => _AdminMainScreenState();
 }
 
 class _AdminMainScreenState extends State<AdminMainScreen> {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final ChatService _chatService = ChatService();
   final UserService _userService = UserService();
-  final int _selectedIndex = 0;
-    Map<String, AppUser> usersMap = <String, AppUser>{};
+  final ChatService _chatService = ChatService();
 
-  AppUser? adminUser;
-  final user = CurrentUserService.instance.currentUser;
+  Map<String, AppUser> _usersMap = {};
+  late final AppUser _adminUser;
 
   @override
   void initState() {
     super.initState();
-    _initialize();
+    _adminUser = CurrentUserService.instance.currentUser!;
+    _loadUsers();
   }
 
-  Future<void> _initialize() async {
-    if (widget.adminUser != null) {
+  Future<void> _loadUsers() async {
+    final allUsers = await _userService.getAllUsers();
+    if (mounted) {
       setState(() {
-        adminUser = widget.adminUser;
+        _usersMap = {for (var user in allUsers) user.id: user};
       });
     }
-
-    await _loadUsers();
   }
 
-Future<void> _loadUsers() async {
-  var allUsers = await _userService.getAllUsers();
-  setState(() {
-    usersMap = 
-    {
-      for (var user in allUsers) user.id: user
-    };
-  });
-}
-void _onItemTapped(int index) {
+  void _onItemTapped(int index) {
+    final routes = [
+      () => const AdminMainScreen(),
+      () => const UserListScreen(),
+      () => const FruitListPage(),
+      () => const AdvertisementCategoriesScreen(),
+      () => UserDetailsScreen(userId: _adminUser.id),
+    ];
 
-    switch (index) {
-      case 0:
-            if (user?.isAdmin??false)
-            {
-              Navigator.push(
-                context, MaterialPageRoute(builder: (context) => AdminMainScreen(adminUser: user)));
-            }
-            else
-            {
-              Navigator.push(
-                context, MaterialPageRoute(builder: (context) => UserMainScreen(appUser: user)));
-            }
-        break;
-      case 1:
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const UserListScreen()),
-        );
-        break;
-      case 2:
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const FruitListPage()),
-        );
-        break;
-      case 3:
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const AdvertisementsScreen()),
-        );
-        break;
+    if (index < routes.length) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => routes[index]()),
+      );
     }
   }
 
+  void _handleChatTap(ChatItem chat) {
+    if (chat.isGroup) {
+      Navigator.pushNamed(
+        context,
+        '/group-chat',
+        arguments: {
+          'chatId': chat.id,
+          'fruitTypeId': chat.id,
+          'fruitTypeName': chat.name,
+        },
+      );
+    } else {
+      final otherUserId = chat.getOtherUser(_adminUser.id) ?? '';
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => PrivateChatScreen.asAdmin(
+            chatId: chat.id,
+            userId: otherUserId,
+          ),
+        ),
+      );
+    }
+  }
 
- Widget build(BuildContext context) {
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: Size.fromHeight(kToolbarHeight + 3),
-        child: Container(
-          color: Colors.green[800],
-          child: Column(
-            children: [
-              AppBar(
-                elevation: 0,
-                backgroundColor: Colors.transparent,
-                title: const Text(
-                  'Poruke',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
-              Container(
-                height: 3,
-                color: Colors.orangeAccent[400],
-              ),
-            ],
-          ),
-        ),
-      ),
-      body: StreamBuilder<QuerySnapshot>(
-  stream: _firestore
-      .collection('chats')
-      .where('memberIds', arrayContains: adminUser?.id)
-      .orderBy('lastMessageTimestamp', descending: true)
-      .snapshots(),
-  builder: (context, chatSnapshot) {
-    if (!chatSnapshot.hasData) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    var chats = chatSnapshot.data!.docs;
-
-    return ListView.builder(
-      itemCount: chats.length,
-      itemBuilder: (context, index) {
-        var chat = chats[index];
-        var chatData = chat.data() as Map<String, dynamic>;
-
-        bool isGroup = chatData['type'] == "group";
-        String chatTitle = chatData['name'] ?? "Nepoznat chat";
-
-        // Stream za člana koji je trenutno ulogovan
-        return StreamBuilder<DocumentSnapshot>(
-          stream: _firestore
-              .collection('chats')
-              .doc(chat.id)
-              .collection('members')
-              .doc(adminUser?.id)
-              .snapshots(),
-          builder: (context, memberSnapshot) {
-            if (!memberSnapshot.hasData) {
-              return const ListTile(title: Text("Loading..."));
-            }
-
-            var memberData = memberSnapshot.data!.data() as Map<String, dynamic>?;
-
-            var lastMessageMap = memberData?['lastMessage'] as Map<String, dynamic>?;
-            String lastMessage = lastMessageMap?['message'] ?? "";
-            DateTime lastMessageTimestamp =
-                (lastMessageMap?['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now();
-            bool isLastMessageRead = (lastMessageMap?['read'] ?? false) || lastMessage == "-" ;
-
-            // Ako je privatni chat, dohvatimo ime drugog korisnika
-
-            String otherUserId = '';
-            String? thumbUrl = null;
-            if (!isGroup && chatData['memberIds'] != null) {
-              var memberIds = (chatData['memberIds'] as List);
-              
-              otherUserId = memberIds.firstWhere(
-                (m) => m != adminUser?.id,
-                orElse: () => {},
-              );
-
-              // Ovde možeš pozvati mapu svih usera da dohvatiš ime
-              chatTitle = usersMap[otherUserId]?.name ?? 'Nepoznat korisnik';
-
-              thumbUrl = usersMap[otherUserId]?.thumbUrl;
-            }
-
-            String truncatedMessage = lastMessage.length > 30
-                ? '${lastMessage.substring(0, 30)}...'
-                : lastMessage;
-
-            return ListTile(
-              leading: Container(
-                width: 60,
-                height: 60, // isti width i height → kvadrat
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.orangeAccent[700] ?? Colors.orange,
-                    width: 2,
-                  ),
-                ),
-                child: ClipOval(
-                  child: AspectRatio(
-                    aspectRatio: 1, // garantuje da slika ostane kvadratna
-                    child: thumbUrl != null
-                            ? CachedNetworkImage(
-                                imageUrl: thumbUrl!,
-                                fit: BoxFit.cover,
-                                placeholder: (context, url) =>
-                                    Image.asset('assets/images/default_avatar.jpg', fit: BoxFit.cover),
-                                errorWidget: (context, url, error) =>
-                                    Image.asset('assets/images/default_avatar.jpg', fit: BoxFit.cover),
-                              )
-                            : Image.asset('assets/images/default_avatar.jpg', fit: BoxFit.cover)),
-                  ),
-                ),
-              title: Text(
-                chatTitle,
-                style: TextStyle(
-                    fontWeight: isLastMessageRead ? FontWeight.normal : FontWeight.bold,
-                    fontSize: 16),
-              ),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    truncatedMessage,
-                    style: TextStyle(
-                        fontWeight: isLastMessageRead ? FontWeight.normal : FontWeight.bold),
-                  ),
-                  Text(
-                    timeago.format(lastMessageTimestamp),
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ],
-              ),
-              //trailing: Icon(Icons.arrow_forward, color: Colors.orangeAccent[400], size: isLastMessageRead ? 24 : 28),
-              onTap: () {
-                if (isGroup) {
-                  Navigator.pushNamed(
-                    context,
-                    '/group-chat',
-                    arguments: {
-                      'chatId': chat.id,
-                      'fruitTypeId': chat.id,
-                      'fruitTypeName': chatData['name'],
-                    },
-                  );
-                } else {
-                  Navigator.pushNamed(
-                              context,
-                              '/admin-private-chat',
-                              arguments: {
-                                'chatId': chat.id,
-                                'userId': otherUserId
-                              },
-                            );
-                }
-              },
-            );
-          },
-        );
-      },
+      appBar: _buildAppBar(),
+      body: _buildBody(),
+      bottomNavigationBar: _buildBottomNavigationBar(),
     );
-  },
-),
+  }
 
-
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          border: Border(
-            top: BorderSide(
-              color: Colors.orangeAccent[400] ?? Colors.orange,
-              width: 1.0,
+  PreferredSizeWidget _buildAppBar() {
+    return PreferredSize(
+      preferredSize: const Size.fromHeight(kToolbarHeight + 3),
+      child: Container(
+        color: Colors.green[800],
+        child: Column(
+          children: [
+            AppBar(
+              elevation: 0,
+              backgroundColor: Colors.transparent,
+              title: const Text(
+                'Poruke',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
-          ),
-        ),
-        child: BottomNavigationBar(
-          currentIndex: 0,
-          selectedItemColor: Colors.green[800],
-          unselectedItemColor: Colors.grey,
-          type: BottomNavigationBarType.fixed,
-          onTap: _onItemTapped,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.chat),
-              label: 'Poruke',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.people),
-              label: 'Korisnici',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.forest),
-              label: 'Voćne vrste',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.tv),
-              label: 'Reklame',
+            Container(
+              height: 3,
+              color: Colors.brown[500],
             ),
           ],
         ),
       ),
     );
   }
+
+  Widget _buildBody() {
+    return StreamBuilder<List<ChatItem>>(
+      stream: _chatService.getChatsStreamForUser(_adminUser.id),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const Center(child: Text('Nema poruka'));
+        }
+
+        return ListView.separated(
+          itemCount: snapshot.data!.length,
+          separatorBuilder: (_, __) => const Divider(
+            color: Colors.grey,
+            thickness: 1,
+            height: 12,
+          ),
+          itemBuilder: (context, index) {
+            final chat = snapshot.data![index];
+            return _ChatListTile(
+              chat: chat,
+              adminId: _adminUser.id,
+              usersMap: _usersMap,
+              onTap: () => _handleChatTap(chat),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildBottomNavigationBar() {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(
+            color: Colors.brown[500] ?? Colors.brown,
+            width: 2,
+          ),
+        ),
+      ),
+      child: BottomNavigationBar(
+        currentIndex: 0,
+        selectedItemColor: Colors.brown[500],
+        unselectedItemColor: Colors.grey,
+        type: BottomNavigationBarType.fixed,
+        onTap: _onItemTapped,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.chat),
+            label: 'Poruke',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.people),
+            label: 'Korisnici',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.forest),
+            label: 'Voćne vrste',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.tv),
+            label: 'Reklame',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_2_sharp),
+            label: 'Profil',
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-          
+class _ChatListTile extends StatelessWidget {
+  final ChatItem chat;
+  final String adminId;
+  final Map<String, AppUser> usersMap;
+  final VoidCallback onTap;
+
+  const _ChatListTile({
+    required this.chat,
+    required this.adminId,
+    required this.usersMap,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final otherUserId = chat.getOtherUser(adminId) ?? '';
+    final chatTitle = _getChatTitle(otherUserId);
+    final thumbUrl = _getThumbUrl(otherUserId);
+    final lastMessage = chat.lastMessage;
+    final hasUnread = chat.hasUnreadLastMessage(adminId);
+
+    return ListTile(
+      leading: _buildAvatar(thumbUrl),
+      title: Text(
+        chatTitle,
+        style: TextStyle(
+          fontWeight: hasUnread ? FontWeight.bold : FontWeight.normal,
+          fontSize: 16.5,
+        ),
+      ),
+      subtitle: _buildSubtitle(lastMessage, hasUnread),
+      onTap: onTap,
+    );
+  }
+
+  String _getChatTitle(String otherUserId) {
+    if (chat.isGroup) {
+      return chat.name ?? 'Nepoznat chat';
+    }
+    return usersMap[otherUserId]?.name ?? 'Nepoznat korisnik';
+  }
+
+  String? _getThumbUrl(String otherUserId) {
+    if (chat.isGroup) return null;
+    return usersMap[otherUserId]?.thumbUrl;
+  }
+
+  Widget _buildAvatar(String? thumbUrl) {
+    return Container(
+      width: 60,
+      height: 60,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: Colors.brown[300] ?? Colors.brown,
+          width: 2,
+        ),
+      ),
+      child: ClipOval(
+        child: AspectRatio(
+          aspectRatio: 1,
+          child: chat.isGroup
+              ? const Icon(Icons.groups)
+              : thumbUrl != null
+                  ? CachedNetworkImage(
+                      imageUrl: thumbUrl,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => const Icon(Icons.person),
+                      errorWidget: (_, __, ___) => const Icon(Icons.person),
+                    )
+                  : const Icon(Icons.person),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubtitle(LastMessage? lastMessage, bool hasUnread) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          lastMessage != null
+              ? lastMessage.getTruncatedText(maxLength: 30)
+              : '-',
+          style: TextStyle(
+            fontWeight: hasUnread ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+        Text(
+          lastMessage != null
+              ? formatChatTime(lastMessage.timestamp.toDate())
+              : '',
+          style: const TextStyle(fontSize: 12, color: Colors.grey),
+        ),
+      ],
+    );
+  }
+}

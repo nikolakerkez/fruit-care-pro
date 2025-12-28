@@ -1,14 +1,13 @@
-import 'package:bb_agro_portal/screens/change_password_screen.dart';
+import 'package:fruit_care_pro/screens/change_password_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:bb_agro_portal/screens/create_account_screen.dart';
-import 'package:bb_agro_portal/shared_ui_components.dart';  // Popravio sam grešku u importu (dva tačka)
-import 'package:bb_agro_portal/models/user.dart';
-import 'package:bb_agro_portal/services/user_service.dart';
-import 'package:bb_agro_portal/screens/user_main_screen.dart';
-import 'package:bb_agro_portal/screens/admin_main_screen.dart';
+import 'package:fruit_care_pro/shared_ui_components.dart'; // Popravio sam grešku u importu (dva tačka)
+import 'package:fruit_care_pro/models/user.dart';
+import 'package:fruit_care_pro/services/user_service.dart';
+import 'package:fruit_care_pro/screens/user_main_screen.dart';
+import 'package:fruit_care_pro/screens/admin_main_screen.dart';
 import 'package:provider/provider.dart';
-import 'package:bb_agro_portal/user_notifier.dart';
-import 'package:bb_agro_portal/current_user_service.dart';
+import 'package:fruit_care_pro/user_notifier.dart';
+import 'package:fruit_care_pro/current_user_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -18,38 +17,42 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  //---Credentials text controllers---
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  //---Credentials text controllers---
+
+  //Service for login
   final UserService _userService = UserService();
-  final _formKey = GlobalKey<FormState>(); // Dodajemo FormKey za validaciju
-  bool _isLoading = false;
+
+  //Form key for validation
+  final _formKey = GlobalKey<FormState>();
   String errorInfo = "";
+
+  //---Credential Focus nodes for validation---
   final FocusNode _usernameFocusNode = FocusNode();
   final FocusNode _passwordFocusNode = FocusNode();
+  //---Credential Focus nodes for validation---
 
   @override
   void initState() {
     super.initState();
     _usernameFocusNode.addListener(() {
-
-      if (_usernameFocusNode.hasFocus)
-      {
-      setState(() {
-                // Resetuj validator na null kada je u fokusu
-      
-              });
+      if (_usernameFocusNode.hasFocus) {
+        setState(() {
+          //Reset validator
+        });
       }
     });
     _passwordFocusNode.addListener(() {
-      if (_passwordFocusNode.hasFocus)
-      {
+      if (_passwordFocusNode.hasFocus) {
         setState(() {
-          // Resetuj validator na null kada je u fokusu
+          // Reset validator
         });
       }
     });
   }
-  
+
   @override
   void dispose() {
     _usernameFocusNode.dispose();
@@ -57,10 +60,9 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-
   String? nameValidator(String? value) {
     if (value == null || value.isEmpty) {
-      return 'Molimo unesite korisnincko ime';
+      return 'Molimo unesite korisninčko ime';
     }
     // final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
     // if (!emailRegex.hasMatch(value)) {
@@ -78,62 +80,65 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     return null;
   }
+
   Future<void> _login() async {
-    if (_formKey.currentState?.validate() ?? false) {
-      // Ako su podaci validni, pozivamo login
+    if (!_formKey.currentState!.validate()) return;
+
+    String username = _usernameController.text;
+    String password = _passwordController.text;
+    String email = "$username@fruitcarepro.com";
+    errorInfo = "";
+
+    AppUser? appUser = await _userService.login(email, password);
+
+    if (!mounted) return;
+
+    //1. User does not exist, show corresponding message
+    if (appUser == null) {
       setState(() {
-        _isLoading = true;
+        errorInfo = "Ne postoji korisnik. Pokušajte ponovo.";
       });
+      return;
+    }
 
-      String username = _usernameController.text;
-      String password = _passwordController.text;
-
-      String email = username + "@agrobb.com";
-      // Pozivanje AuthService za login
-      AppUser? appUser = await _userService.login(email, password);
-
+    //2. User account is not activated, show corresponding message
+    if (!appUser.isActive) {
       setState(() {
-        _isLoading = false;
+        errorInfo =
+            "Vaš nalog nije više aktivan, kontaktirajte administratora..";
       });
+      return;
+    }
 
-      Provider.of<UserNotifier>(context, listen: false).setUser(
-        appUser!
+    Provider.of<UserNotifier>(context, listen: false).setUser(appUser);
+    CurrentUserService.instance.setCurrentUser(appUser);
+
+    //3. If this is first login, password change is needed, forward to change password screen
+    if (appUser.isPasswordChangeNeeded) {
+      Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (context) => ChangePasswordScreen(appUser: appUser)));
+
+      return;
+    }
+
+    //4. If user is administrator, forward to admin main screen
+    if (appUser.isAdmin) {
+      // If it is admin forward to the admin main screen
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => AdminMainScreen()),
       );
 
-      CurrentUserService.instance.setCurrentUser(appUser);
-
-      if (appUser != null) {
-        if (!appUser.isActive)
-        {
-          errorInfo = "Vas nalog nije vise aktivan, kontaktirajte administratora.";
-        }
-        else if (appUser.isPasswordChangeNeeded)
-        {
-          // Ako je korisnik običan korisnik, preusmeri na user ekran
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => ChangePasswordScreen(appUser: appUser)),
-          );
-        }
-        else if (appUser.isAdmin) {
-          // Ako je korisnik admin, preusmeri na admin ekran
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => AdminMainScreen(adminUser: appUser)),
-          );
-        } 
-        else{
-          // Ako je korisnik običan korisnik, preusmeri na user ekran
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => UserMainScreen(appUser: appUser)),
-          );
-        }
-      } else {
-        // Ako je došlo do greške prilikom logovanja
-        // _showErrorDialog('Greška pri prijavi. Proverite vaše podatke.');
-      }
+      return;
     }
+
+    //5. If it is regular user forward to the regular user main screen
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => UserMainScreen()),
+    );
   }
 
   @override
@@ -155,7 +160,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               Container(
                 height: 3,
-                color: Colors.orangeAccent[400],
+                color: Colors.brown[500],
               ),
             ],
           ),
@@ -163,12 +168,13 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
       body: SingleChildScrollView(
         child: Form(
-          key: _formKey,  // Povezivanje Form sa ključem
+          key: _formKey, // Povezivanje Form sa ključem
           child: Column(
             children: [
               Container(
                 color: Colors.transparent, // Postavite pozadinsku boju na belu
-                padding: EdgeInsets.all(30), // Dodajte padding oko slike ako želite
+                padding:
+                    EdgeInsets.all(30), // Dodajte padding oko slike ako želite
                 child: Image.asset(
                   'assets/images/logo.png',
                   width: 150,
@@ -177,9 +183,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
                 child: generateTextField(
-                  labelText: "Korisnicko ime",
+                  labelText: "Korisničko ime",
                   controller: _usernameController,
                   iconData: Icons.email,
                   focusNode: _usernameFocusNode,
@@ -187,24 +194,25 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
                 child: generateTextField(
-                  labelText: "Šifra",
-                  controller: _passwordController,
-                  iconData: Icons.lock,
-                  isPassword: true,
-                  focusNode: _passwordFocusNode,
-                  validator: passwordValidator
-                ),
+                    labelText: "Šifra",
+                    controller: _passwordController,
+                    iconData: Icons.lock,
+                    isPassword: true,
+                    focusNode: _passwordFocusNode,
+                    validator: passwordValidator),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
                 child: generateButton(
                   text: "Prijavite se na portal",
                   onPressed: _login,
                 ),
               ),
-              if (errorInfo != null && errorInfo.isNotEmpty) ...[
+              if (errorInfo.isNotEmpty) ...[
                 const SizedBox(height: 6), // razmak između TextField i label
                 Text(
                   errorInfo,
@@ -212,24 +220,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     color: Colors.red,
                     fontSize: 12,
                   ),
-                )]
-              
-              // Padding(
-              //   padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 14),
-              //   child: GestureDetector(
-              //     onTap: () => Navigator.of(context).push(
-              //       MaterialPageRoute(builder: (_) => CreateAccountScreen()),
-              //     ),
-              //     child: Text(
-              //       "Napravite novi nalog",
-              //       style: TextStyle(
-              //         color: Colors.green,
-              //         fontSize: 15,
-              //         fontWeight: FontWeight.bold,
-              //       ),
-              //     ),
-              //   ),
-              // ),
+                )
+              ]
             ],
           ),
         ),

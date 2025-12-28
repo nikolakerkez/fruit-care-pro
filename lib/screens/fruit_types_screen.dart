@@ -1,12 +1,15 @@
-import 'package:bb_agro_portal/screens/user_main_screen.dart';
-import 'package:bb_agro_portal/services/chat_service.dart';
+import 'package:fruit_care_pro/models/advertisement_category.dart';
+import 'package:fruit_care_pro/screens/advertisement_categories_screen.dart';
+import 'package:fruit_care_pro/screens/user_main_screen.dart';
+import 'package:fruit_care_pro/services/chat_service.dart';
+import 'package:fruit_care_pro/widgets/user_details_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:bb_agro_portal/add_update_fruit_type.dart';
-import 'package:bb_agro_portal/models/fruit_type.dart';
-import 'package:bb_agro_portal/services/fruit_types_service.dart';
-import 'package:bb_agro_portal/current_user_service.dart';
-import 'package:bb_agro_portal/screens/admin_main_screen.dart';
-import 'package:bb_agro_portal/screens/users_screen.dart';
+import 'package:fruit_care_pro/screens/add_update_fruit_type.dart';
+import 'package:fruit_care_pro/models/fruit_type.dart';
+import 'package:fruit_care_pro/services/fruit_types_service.dart';
+import 'package:fruit_care_pro/current_user_service.dart';
+import 'package:fruit_care_pro/screens/admin_main_screen.dart';
+import 'package:fruit_care_pro/screens/users_screen.dart';
 
 class FruitListPage extends StatefulWidget {
   const FruitListPage({super.key});
@@ -66,13 +69,13 @@ class _FruitListPageState extends State<FruitListPage> {
             if (user?.isAdmin??false)
             {
               Navigator.push(
-                context, MaterialPageRoute(builder: (context) => AdminMainScreen(adminUser: user)));
+                context, MaterialPageRoute(builder: (context) => AdminMainScreen()));
             }
             else
             {
               print(user?.name);
               Navigator.push(
-                context, MaterialPageRoute(builder: (context) => UserMainScreen(appUser: user)));
+                context, MaterialPageRoute(builder: (context) => UserMainScreen()));
             }
         break;
       case 1:
@@ -90,7 +93,13 @@ class _FruitListPageState extends State<FruitListPage> {
       case 3:
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => const UserListScreen()),
+          MaterialPageRoute(builder: (context) => const AdvertisementCategoriesScreen()),
+        );
+        break;
+      case 4:
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => UserDetailsScreen(userId: user?.id))
         );
         break;
     }
@@ -129,7 +138,7 @@ class _FruitListPageState extends State<FruitListPage> {
                   ),
                 ],
               ),
-              Container(height: 3, color: Colors.orangeAccent[400]),
+              Container(height: 3, color: Colors.brown[500]),
             ],
           ),
         ),
@@ -148,6 +157,23 @@ class _FruitListPageState extends State<FruitListPage> {
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
+                 floatingLabelStyle: TextStyle(
+                  color: Colors.brown[500], // boja kada je fokus
+                  fontWeight: FontWeight.bold,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: Colors.grey, // boja kada nije fokus
+                    width: 2,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: Colors.brown[500]!, // boja kada je fokus
+                    width: 2,
+                  ))
               ),
             ),
           ),
@@ -192,7 +218,7 @@ class _FruitListPageState extends State<FruitListPage> {
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: Colors.orangeAccent[400] ?? Colors.orange,
+                                  color: Colors.green[800] ?? Colors.orange,
                                   width: 2,
                                 ),
                                 boxShadow: [
@@ -229,7 +255,7 @@ class _FruitListPageState extends State<FruitListPage> {
                                     ),
                                   ),
                                   IconButton(
-                                    icon: Icon(Icons.edit, color: Colors.orange),
+                                    icon: Icon(Icons.edit, color: Colors.brown[500]),
                                     onPressed: () {
                                       Navigator.push(
                                         context,
@@ -240,7 +266,7 @@ class _FruitListPageState extends State<FruitListPage> {
                                     },
                                   ),
                                   IconButton(
-                                    icon: Icon(Icons.delete, color: Colors.orange),
+                                    icon: Icon(Icons.close, color: Colors.red),
                                     onPressed: () => _showDeleteDialog(fruit),
                                   ),
                                 ],
@@ -261,14 +287,14 @@ class _FruitListPageState extends State<FruitListPage> {
         decoration: BoxDecoration(
           border: Border(
             top: BorderSide(
-              color: Colors.orangeAccent[400] ?? Colors.orange,
+              color: Colors.brown[500] ?? Colors.orange,
               width: 1.0,
             ),
           ),
         ),
         child: BottomNavigationBar(
           currentIndex: 2,
-          selectedItemColor: Colors.green[800],
+          selectedItemColor: Colors.brown[500],
           unselectedItemColor: Colors.grey,
           onTap: _onItemTapped,
           type: BottomNavigationBarType.fixed,
@@ -288,6 +314,10 @@ class _FruitListPageState extends State<FruitListPage> {
             BottomNavigationBarItem(
               icon: Icon(Icons.tv),
               label: 'Reklame',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.person_2_sharp),
+              label: 'Profil',
             ),
           ],
         ),

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:bb_agro_portal/auth_service.dart';
+import 'package:fruit_care_pro/auth_service.dart';
 
 final TextEditingController _name = TextEditingController();
 final TextEditingController _email = TextEditingController();
