@@ -1,9 +1,10 @@
-# Uncomment this line to define a global platform for your project
+# Minimum iOS version
 platform :ios, '13.0'
 
-# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
+# Disable CocoaPods stats
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
+# Project configuration
 project 'Runner', {
   'Debug' => :debug,
   'Profile' => :release,
@@ -41,42 +42,36 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
-
+    
     target.build_configurations.each do |config|
-      # Force iOS 13.0 deployment target za SVE
+      # Force iOS 13.0 deployment target
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
       
-      # Fix -G flag issue
+      # CRITICAL: Disable compiler index store (fixes -G flag error)
       config.build_settings.delete('COMPILER_INDEX_STORE_ENABLE')
       config.build_settings['COMPILER_INDEX_STORE_ENABLE'] = 'NO'
       
-      # Disable bitcode
+      # Disable bitcode (deprecated in Xcode 14+)
       config.build_settings['ENABLE_BITCODE'] = 'NO'
       
-      # Swift version (ako koristiš Swift packages)
-      config.build_settings['SWIFT_VERSION'] = '5.9'
-      
-      # Other fixes
+      # Architecture settings
       config.build_settings['ONLY_ACTIVE_ARCH'] = 'NO'
+      config.build_settings['VALID_ARCHS'] = 'arm64'
       config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'i386'
-    end
-  end
-  
-  # EKSPLICITNO force deployment target za problematične pods
-  installer.pods_project.targets.each do |target|
-    if ['cloud_functions_web', 'firebase_storage_web', 'image_picker_ios'].include? target.name
-      target.build_configurations.each do |config|
-        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+      
+      # Clean up xcconfig files - remove -index-store-path flag
+      xcconfig_path = config.base_configuration_reference.real_path
+      if xcconfig_path && File.exist?(xcconfig_path)
+        xcconfig = File.read(xcconfig_path)
+        xcconfig_mod = xcconfig.gsub(/-index-store-path/, '')
+        File.open(xcconfig_path, "w") { |file| file << xcconfig_mod }
       end
     end
   end
   
-  # Fix za Runner target
-  installer.aggregate_targets.each do |aggregate_target|
-    aggregate_target.user_project.native_targets.each do |native_target|
-      native_target.build_configurations.each do |config|
-        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
-      end
-    end
+  # Fix project-level settings
+  installer.pods_project.build_configurations.each do |config|
+    config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+    config.build_settings['COMPILER_INDEX_STORE_ENABLE'] = 'NO'
   end
 end
