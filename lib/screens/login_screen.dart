@@ -175,11 +175,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 color: Colors.transparent, // Postavite pozadinsku boju na belu
                 padding:
                     EdgeInsets.all(30), // Dodajte padding oko slike ako želite
-                child: Image.asset(
-                  'assets/images/logo.png',
-                  width: 150,
-                  height: 150,
-                  fit: BoxFit.contain,
+                child: Icon(
+                  Icons.agriculture_rounded,
+                  size: 150,
                 ),
               ),
               Padding(
