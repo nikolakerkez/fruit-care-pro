@@ -8,7 +8,6 @@ import 'package:fruit_care_pro/shared_ui_components.dart';
 import 'package:fruit_care_pro/widgets/user_details_screen.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:timeago/timeago.dart' as timeago;
 import 'users_screen.dart';
 import 'package:fruit_care_pro/screens/fruit_types_screen.dart';
 import 'package:fruit_care_pro/current_user_service.dart';
@@ -103,6 +102,7 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
           children: [
             AppBar(
               elevation: 0,
+              centerTitle: true,
               backgroundColor: Colors.transparent,
               title: const Text(
                 'Poruke',

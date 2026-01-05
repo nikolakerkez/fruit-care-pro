@@ -179,17 +179,18 @@ class _AdvertisementCategoriesState
                   ],
                 ),
                 actions: [
-                  IconButton(
-                    icon: Icon(Icons.add, color: Colors.white),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => AddUpdateCategory(),
-                        ),
-                      );
-                    },
-                  ),
+                  if (isAdmin)
+                    IconButton(
+                      icon: Icon(Icons.add, color: Colors.white),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => AddUpdateCategory(),
+                          ),
+                        );
+                      },
+                    )
                 ],
               ),
               Container(height: 3, color: Colors.brown[500]),

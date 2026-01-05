@@ -36,17 +36,39 @@ class AdvertisementService {
   }
 
   Future<void> AddNewAdvertisement(Advertisement model) async {
-    DocumentReference docRef = await _db.collection('advertisements').add({
-      'name': model.name,
-      'description': model.description,
-      'url': model.url,
-      'imageUrl': model.imageUrl,
-      'imagePath': model.imagePath,
-      'thumbUrl': model.thumbUrl,
-      'thumbPath': model.thumbPath,
-      'localImagePath': model.localImagePath,
-      'categoryRefId': model.categoryRefId
-    });
+    try {
+
+            print('Started adding advertisement');
+
+      await _db.runTransaction((transaction) async {
+        DocumentReference docRef = _db.collection('advertisements').doc();
+
+        transaction.set(docRef, {
+          'name': model.name,
+          'description': model.description,
+          'url': model.url,
+          'imageUrl': model.imageUrl,
+          'imagePath': model.imagePath,
+          'thumbUrl': model.thumbUrl,
+          'thumbPath': model.thumbPath,
+          'localImagePath': model.localImagePath,
+          'categoryRefId': model.categoryRefId
+        });
+      });
+    } catch (e) {
+      print('Error adding advertisement: $e');
+    }
+    // DocumentReference docRef = await _db.collection('advertisements').add({
+    //   'name': model.name,
+    //   'description': model.description,
+    //   'url': model.url,
+    //   'imageUrl': model.imageUrl,
+    //   'imagePath': model.imagePath,
+    //   'thumbUrl': model.thumbUrl,
+    //   'thumbPath': model.thumbPath,
+    //   'localImagePath': model.localImagePath,
+    //   'categoryRefId': model.categoryRefId
+    // });
   }
 
   Future<void> UpdateAdvertisement(Advertisement model) async {

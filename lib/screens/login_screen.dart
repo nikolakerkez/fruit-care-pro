@@ -1,13 +1,12 @@
-import 'package:fruit_care_pro/screens/change_password_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:fruit_care_pro/shared_ui_components.dart'; // Popravio sam grešku u importu (dva tačka)
+import 'package:provider/provider.dart';
+import 'package:fruit_care_pro/shared_ui_components.dart';
 import 'package:fruit_care_pro/models/user.dart';
 import 'package:fruit_care_pro/services/user_service.dart';
 import 'package:fruit_care_pro/screens/user_main_screen.dart';
 import 'package:fruit_care_pro/screens/admin_main_screen.dart';
-import 'package:provider/provider.dart';
+import 'package:fruit_care_pro/screens/change_password_screen.dart';
 import 'package:fruit_care_pro/user_notifier.dart';
-import 'package:fruit_care_pro/current_user_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -17,61 +16,42 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  //---Credentials text controllers---
+  // Text controllers
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  //---Credentials text controllers---
 
-  //Service for login
+  // Form key for validation
+  final _formKey = GlobalKey<FormState>();
+  
+  // UI state
+  bool _obscurePassword = true;
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  // Service - should be injected via Provider/GetIt in production
   final UserService _userService = UserService();
 
-  //Form key for validation
-  final _formKey = GlobalKey<FormState>();
-  String errorInfo = "";
-
-  //---Credential Focus nodes for validation---
-  final FocusNode _usernameFocusNode = FocusNode();
-  final FocusNode _passwordFocusNode = FocusNode();
-  //---Credential Focus nodes for validation---
-
-  @override
-  void initState() {
-    super.initState();
-    _usernameFocusNode.addListener(() {
-      if (_usernameFocusNode.hasFocus) {
-        setState(() {
-          //Reset validator
-        });
-      }
-    });
-    _passwordFocusNode.addListener(() {
-      if (_passwordFocusNode.hasFocus) {
-        setState(() {
-          // Reset validator
-        });
-      }
-    });
-  }
+  // Email domain constant - should be in config file
+  static const String _emailDomain = '@fruitcarepro.com';
 
   @override
   void dispose() {
-    _usernameFocusNode.dispose();
-    _passwordFocusNode.dispose();
+    _usernameController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
-  String? nameValidator(String? value) {
+  /// Validates username input
+  String? _validateUsername(String? value) {
     if (value == null || value.isEmpty) {
-      return 'Molimo unesite korisninčko ime';
+      return 'Molimo unesite korisničko ime';
     }
-    // final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
-    // if (!emailRegex.hasMatch(value)) {
-    //   return 'Unesite validan email';
-    // }
+    // Add more validation rules if needed
     return null;
   }
 
-  String? passwordValidator(String? value) {
+  /// Validates password input
+  String? _validatePassword(String? value) {
     if (value == null || value.isEmpty) {
       return 'Molimo unesite šifru';
     }
@@ -81,63 +61,77 @@ class _LoginScreenState extends State<LoginScreen> {
     return null;
   }
 
-  Future<void> _login() async {
+  /// Handles the login flow
+  Future<void> _handleLogin() async {
+    // Clear previous error
+    setState(() => _errorMessage = null);
+
+    // Validate form
     if (!_formKey.currentState!.validate()) return;
 
-    String username = _usernameController.text;
-    String password = _passwordController.text;
-    String email = "$username@fruitcarepro.com";
-    errorInfo = "";
+    // Show loading indicator
+    setState(() => _isLoading = true);
 
-    AppUser? appUser = await _userService.login(email, password);
+    try {
+      final username = _usernameController.text.trim();
+      final password = _passwordController.text;
+      final email = '$username$_emailDomain';
 
-    if (!mounted) return;
+      // Attempt login
+      final appUser = await _userService.login(email, password);
 
-    //1. User does not exist, show corresponding message
-    if (appUser == null) {
-      setState(() {
-        errorInfo = "Ne postoji korisnik. Pokušajte ponovo.";
-      });
-      return;
+      if (!mounted) return;
+
+      // Handle login result
+      if (appUser == null) {
+        _showError('Ne postoji korisnik. Pokušajte ponovo.');
+        return;
+      }
+
+      if (!appUser.isActive) {
+        _showError('Vaš nalog nije više aktivan, kontaktirajte administratora.');
+        return;
+      }
+
+      // Update user state
+      Provider.of<UserNotifier>(context, listen: false).setUser(appUser);
+
+      // Navigate based on user status
+      _navigateToNextScreen(appUser);
+      
+    } catch (e) {
+      if (!mounted) return;
+      _showError('Došlo je do greške prilikom prijavljivanja. Pokušajte ponovo.');
+      // TODO: Log error to monitoring service
+      debugPrint('Login error: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  /// Shows error message
+  void _showError(String message) {
+    setState(() => _errorMessage = message);
+  }
+
+  /// Navigates to appropriate screen based on user type and status
+  void _navigateToNextScreen(AppUser user) {
+    Widget nextScreen;
+
+    if (user.isPasswordChangeNeeded) {
+      nextScreen = ChangePasswordScreen(appUser: user);
+    } else if (user.isAdmin) {
+      nextScreen = const AdminMainScreen();
+    } else {
+      nextScreen = const UserMainScreen();
     }
 
-    //2. User account is not activated, show corresponding message
-    if (!appUser.isActive) {
-      setState(() {
-        errorInfo =
-            "Vaš nalog nije više aktivan, kontaktirajte administratora..";
-      });
-      return;
-    }
-
-    Provider.of<UserNotifier>(context, listen: false).setUser(appUser);
-    CurrentUserService.instance.setCurrentUser(appUser);
-
-    //3. If this is first login, password change is needed, forward to change password screen
-    if (appUser.isPasswordChangeNeeded) {
-      Navigator.push(
-          context,
-          MaterialPageRoute(
-              builder: (context) => ChangePasswordScreen(appUser: appUser)));
-
-      return;
-    }
-
-    //4. If user is administrator, forward to admin main screen
-    if (appUser.isAdmin) {
-      // If it is admin forward to the admin main screen
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => AdminMainScreen()),
-      );
-
-      return;
-    }
-
-    //5. If it is regular user forward to the regular user main screen
-    Navigator.push(
+    // Replace current route to prevent going back to login
+    Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (context) => UserMainScreen()),
+      MaterialPageRoute(builder: (context) => nextScreen),
     );
   }
 
@@ -145,16 +139,17 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: PreferredSize(
-        preferredSize: Size.fromHeight(kToolbarHeight + 3),
+        preferredSize: const Size.fromHeight(kToolbarHeight + 3),
         child: Container(
-          color: Colors.green[800], // Boja pozadine AppBar-a
+          color: Colors.green[800],
           child: Column(
             children: [
               AppBar(
                 elevation: 0,
+                centerTitle: true,
                 backgroundColor: Colors.transparent,
-                title: Text(
-                  'Fruit care pro',
+                title: const Text(
+                  'Fruit Care Pro',
                   style: TextStyle(color: Colors.white),
                 ),
               ),
@@ -168,58 +163,78 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
       body: SingleChildScrollView(
         child: Form(
-          key: _formKey, // Povezivanje Form sa ključem
+          key: _formKey,
           child: Column(
             children: [
+              // Logo section
               Container(
-                color: Colors.transparent, // Postavite pozadinsku boju na belu
-                padding:
-                    EdgeInsets.all(30), // Dodajte padding oko slike ako želite
-                child: Icon(
+                color: Colors.transparent,
+                padding: const EdgeInsets.all(30),
+                child: const Icon(
                   Icons.agriculture_rounded,
                   size: 150,
                 ),
               ),
+
+              // Username field
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
                 child: generateTextField(
                   labelText: "Korisničko ime",
                   controller: _usernameController,
-                  iconData: Icons.email,
-                  focusNode: _usernameFocusNode,
-                  validator: nameValidator,
+                  iconData: Icons.person,
+                  validator: _validateUsername,
+                  enabled: !_isLoading,
                 ),
               ),
+
+              // Password field
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
                 child: generateTextField(
-                    labelText: "Šifra",
-                    controller: _passwordController,
-                    iconData: Icons.lock,
-                    isPassword: true,
-                    focusNode: _passwordFocusNode,
-                    validator: passwordValidator),
-              ),
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
-                child: generateButton(
-                  text: "Prijavite se na portal",
-                  onPressed: _login,
+                  labelText: "Šifra",
+                  controller: _passwordController,
+                  iconData: Icons.lock_outline,
+                  isPassword: _obscurePassword,
+                  validator: _validatePassword,
+                  enabled: !_isLoading,
+                  sufixIconWidget: IconButton(
+                    icon: Icon(
+                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                    ),
+                    onPressed: () {
+                      setState(() => _obscurePassword = !_obscurePassword);
+                    },
+                  ),
                 ),
               ),
-              if (errorInfo.isNotEmpty) ...[
-                const SizedBox(height: 6), // razmak između TextField i label
-                Text(
-                  errorInfo,
-                  style: const TextStyle(
-                    color: Colors.red,
-                    fontSize: 12,
+
+              // Login button
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
+                child: _isLoading
+                    ? const CircularProgressIndicator()
+                    : generateButton(
+                        text: "Prijavite se na portal",
+                        onPressed: _handleLogin,
+                      ),
+              ),
+
+              // Error message
+              if (_errorMessage != null) ...[
+                const SizedBox(height: 6),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 40),
+                  child: Text(
+                    _errorMessage!,
+                    style: const TextStyle(
+                      color: Colors.red,
+                      fontSize: 12,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                )
-              ]
+                ),
+              ],
             ],
           ),
         ),

@@ -79,6 +79,7 @@ class _AddUpdateCategoryState extends State<AddUpdateCategory> {
             children: [
               AppBar(
                 elevation: 0,
+                centerTitle: true,
                 backgroundColor: Colors.transparent,
                 title: Text(
                   widget.category == null
@@ -86,7 +87,6 @@ class _AddUpdateCategoryState extends State<AddUpdateCategory> {
                       : 'Izmeni kategoriju',
                   style: TextStyle(
                     color: Colors.white,
-                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ),

@@ -1,0 +1,2 @@
+C:/Users/BOP Developer/source/repos/Flutter/fruit-care-pro/android/app/.cxx/Debug/361r6c6y/x86_64/CMakeFiles/edit_cache.dir
+C:/Users/BOP Developer/source/repos/Flutter/fruit-care-pro/android/app/.cxx/Debug/361r6c6y/x86_64/CMakeFiles/rebuild_cache.dir

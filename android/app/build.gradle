@@ -1,49 +1,78 @@
 plugins {
     id "com.android.application"
-    // START: FlutterFire Configuration
-    id 'com.google.gms.google-services'
-    id 'com.google.firebase.crashlytics'
-    // END: FlutterFire Configuration
-    id "kotlin-android"
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id 'org.jetbrains.kotlin.android'
+    id 'com.google.gms.google-services' // Firebase
+    id 'com.google.firebase.crashlytics' // Firebase Crashlytics
     id "dev.flutter.flutter-gradle-plugin"
 }
 
 android {
     namespace = "rs.nikolakerkez.fruitcarepro"
-    compileSdk = 35
-    ndkVersion = flutter.ndkVersion
+
+    compileSdk = 36 // mora 36 zbog novih pluginova
+
+    defaultConfig {
+        applicationId = "rs.nikolakerkez.fruitcarepro"
+        minSdkVersion = flutter.minSdkVersion // radi i na starijim telefonima
+        targetSdk = 36
+        versionCode = 1
+        versionName = "1.0.0"
+    }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17 
-        targetCompatibility = JavaVersion.VERSION_17 
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = '17'
+        jvmTarget = "17"
+        apiVersion = "1.9"
+        languageVersion = "1.9"
     }
 
-    defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "rs.nikolakerkez.fruitcarepro"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = 23  // Minimalni SDK nivo, sada 21 je standard za mnoge aplikacije
-        targetSdk = 31  // Ažuriraj target SDK na 31 (ili viši, možeš koristiti 33 ako želiš)
-        
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
-    }
-
-    buildTypes {
+      buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.debug
+            // Stara linija: isMinifyEnabled = true -> zameni sa:
+            minifyEnabled true
+            // Debuggable se više ne stavlja na release
+            shrinkResources true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+                "$rootDir/flutter_proguard_rules.pro"
+            )
+            signingConfig signingConfigs.debug
+        }
+        debug {
+            minifyEnabled false
         }
     }
 }
 
 flutter {
     source = "../.."
+}
+
+
+// Kopiraj APK na mesto gde Flutter očekuje
+tasks.whenTaskAdded { task ->
+    if (task.name == 'assembleDebug') {
+        task.doLast {
+            copy {
+                from 'build/outputs/apk/debug'
+                into '../../build/app/outputs/flutter-apk'
+                include 'app-debug.apk'
+            }
+        }
+    }
+
+    if (task.name == 'assembleRelease') {
+        task.doLast {
+            copy {
+                from 'build/outputs/apk/release'
+                into '../../build/app/outputs/flutter-apk'
+                include 'app-release.apk'
+            }
+        }
+    }
 }

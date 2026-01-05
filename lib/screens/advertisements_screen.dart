@@ -133,7 +133,7 @@ class _AdvertisementsScreenState extends State<AdvertisementsScreen> {
   @override
   Widget build(BuildContext context) {
     final bool isAdmin = CurrentUserService.instance.currentUser?.isAdmin ??
-        false; // ili kako već proveravaš
+        false; 
 
     // napravi listu item-a dinamički
      final List<BottomNavigationBarItem> bottomNavItems = [
@@ -190,7 +190,7 @@ class _AdvertisementsScreenState extends State<AdvertisementsScreen> {
                             builder: (_) => CreateAdvertisementScreen(category: category!)));
                       },
                     ),
-                  if (isAdmin)
+                  if (isAdmin && advertisements.isNotEmpty)
                     IconButton(
                       icon: Icon(Icons.edit, color: Colors.white),
                       onPressed: () {
@@ -199,7 +199,7 @@ class _AdvertisementsScreenState extends State<AdvertisementsScreen> {
                                 advertisement: advertisements[_currentPage])));
                       },
                     ),
-                  if (isAdmin)
+                  if (isAdmin && advertisements.isNotEmpty)
                     IconButton(
                       icon: Icon(Icons.delete, color: Colors.white),
                       onPressed: () {

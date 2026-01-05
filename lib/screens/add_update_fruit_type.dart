@@ -94,13 +94,13 @@ class _AddUpdateFruitTypeState extends State<AddUpdateFruitType> {
               AppBar(
                 elevation: 0,
                 backgroundColor: Colors.transparent,
+                centerTitle: true,
                 title: Text(
                   widget.fruitType == null
                       ? 'Dodaj voćnu vrstu'
                       : 'Izmeni voćnu vrstu',
                   style: TextStyle(
                     color: Colors.white,
-                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ),

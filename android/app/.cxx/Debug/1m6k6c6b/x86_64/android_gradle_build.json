@@ -1,0 +1,28 @@
+{
+  "buildFiles": [
+    "C:\\flutter\\packages\\flutter_tools\\gradle\\src\\main\\scripts\\CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "C:\\Users\\Public\\android\\cmake\\3.22.1\\bin\\ninja.exe",
+      "-C",
+      "C:\\Users\\BOP Developer\\source\\repos\\Flutter\\fruit-care-pro\\android\\app\\.cxx\\debug\\1m6k6c6b\\x86_64",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "C:\\Users\\Public\\android\\cmake\\3.22.1\\bin\\ninja.exe",
+    "-C",
+    "C:\\Users\\BOP Developer\\source\\repos\\Flutter\\fruit-care-pro\\android\\app\\.cxx\\debug\\1m6k6c6b\\x86_64",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {},
+  "toolchains": {
+    "toolchain": {
+      "cCompilerExecutable": "C:\\Users\\Public\\android\\ndk\\27.0.12077973\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang.exe",
+      "cppCompilerExecutable": "C:\\Users\\Public\\android\\ndk\\27.0.12077973\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe"
+    }
+  },
+  "cFileExtensions": [],
+  "cppFileExtensions": []
+}

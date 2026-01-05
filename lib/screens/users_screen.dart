@@ -1,3 +1,4 @@
+import 'package:fruit_care_pro/screens/advertisement_categories_screen.dart';
 import 'package:fruit_care_pro/screens/fruit_types_screen.dart';
 import 'package:fruit_care_pro/models/user.dart';
 import 'package:fruit_care_pro/services/user_service.dart';
@@ -159,7 +160,7 @@ class _UserListScreenState extends State<UserListScreen> {
       case 3:
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => const UserListScreen()),
+          MaterialPageRoute(builder: (context) => AdvertisementCategoriesScreen()),
         );
         break;
        case 4:
@@ -183,6 +184,7 @@ class _UserListScreenState extends State<UserListScreen> {
               AppBar(
                 elevation: 0,
                 backgroundColor: Colors.transparent,
+                centerTitle: true,
                 title: Text(
                   'Korisnici',
                   style: TextStyle(color: Colors.white),
