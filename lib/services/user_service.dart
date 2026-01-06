@@ -1,4 +1,9 @@
 import 'dart:io';
+import 'package:fruit_care_pro/exceptions/get_admin_id_exception.dart';
+import 'package:fruit_care_pro/exceptions/get_all_users_exception.dart';
+import 'package:fruit_care_pro/exceptions/login_exception.dart';
+import 'package:fruit_care_pro/exceptions/password_change_exception.dart';
+import 'package:fruit_care_pro/exceptions/wrong_password_exception.dart';
 import 'package:fruit_care_pro/models/change_password_result.dart';
 import 'package:fruit_care_pro/models/create_user_result.dart';
 import 'package:fruit_care_pro/services/documents_service.dart';
@@ -8,11 +13,286 @@ import 'package:fruit_care_pro/models/create_user.dart';
 import 'package:fruit_care_pro/models/user.dart';
 import 'package:fruit_care_pro/models/user_fruit_type.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:fruit_care_pro/utils/error_logger.dart';
 
 class UserService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  /// Authenticates user with email and password
+  /// Returns [AppUser] on success, null on failure
+  /// Throws [LoginException] with specific error details
+  Future<AppUser?> login(String email, String password) async {
+    try {
+      // Validate inputs
+      if (email.isEmpty || password.isEmpty) {
+        throw LoginException('Email and password cannot be empty');
+      }
+
+      // Authenticate with Firebase Auth
+      final userCredential = await _auth.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+
+      final user = userCredential.user;
+      if (user == null) {
+        throw LoginException('Authentication failed - no user returned');
+      }
+
+      // Force token refresh to ensure latest claims
+      await user.getIdToken(true);
+
+      // Fetch user data from Firestore
+      final userDoc = await _db.collection('users').doc(user.uid).get();
+
+      if (!userDoc.exists) {
+        // User authenticated but has no Firestore document
+        await _auth.signOut(); // Clean up auth state
+        throw LoginException('User profile not found');
+      }
+
+      // Parse and return user data
+      final userData = userDoc.data();
+      if (userData == null) {
+        throw LoginException('User data is corrupted');
+      }
+
+      return AppUser.fromFirestore(userData, user.uid, []);
+    } on FirebaseAuthException catch (e) {
+      // Handle specific Firebase Auth errors
+      throw _handleFirebaseAuthError(e);
+    } on FirebaseException catch (e) {
+      // Handle Firestore errors
+      throw LoginException('Database error: ${e.message}');
+    } catch (e) {
+      // Handle unexpected errors
+      throw LoginException('Unexpected error during login: $e');
+    }
+  }
+
+  /// Maps Firebase Auth errors to user-friendly messages
+  LoginException _handleFirebaseAuthError(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'user-not-found':
+        return LoginException('Korisnik sa ovim emailom ne postoji');
+      case 'wrong-password':
+        return LoginException('Pogrešna šifra');
+      case 'invalid-email':
+        return LoginException('Neispravan email format');
+      case 'user-disabled':
+        return LoginException('Nalog je deaktiviran');
+      case 'too-many-requests':
+        return LoginException('Previše pokušaja. Pokušajte kasnije.');
+      case 'network-request-failed':
+        return LoginException('Nema internet konekcije');
+      case 'invalid-credential':
+        return LoginException('Neispravni kredencijali');
+      default:
+        return LoginException('Greška pri prijavljivanju: ${e.message}');
+    }
+  }
+
+/// Changes user's password
+/// Throws [WrongPasswordException] if current password is incorrect
+/// Throws [PasswordChangeException] for other errors
+Future<void> changePassword(
+  String userId,
+  String currentPassword,
+  String newPassword,
+) async {
+  try {
+    // Validate inputs
+    if (userId.isEmpty || currentPassword.isEmpty || newPassword.isEmpty) {
+      throw PasswordChangeException('All fields are required');
+    }
+
+    if (currentPassword == newPassword) {
+      throw PasswordChangeException('New password must be different');
+    }
+
+    // Get current user
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw PasswordChangeException('No authenticated user found');
+    }
+
+    if (user.email == null) {
+      throw PasswordChangeException('User email not found');
+    }
+
+    // Re-authenticate
+    final credential = EmailAuthProvider.credential(
+      email: user.email!,
+      password: currentPassword,
+    );
+
+    try {
+      await user.reauthenticateWithCredential(credential);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'invalid-credential' || e.code == 'wrong-password') {
+        throw WrongPasswordException('Stara šifra nije ispravna');
+      }
+      rethrow;
+    }
+
+    // Update password
+    await user.updatePassword(newPassword);
+
+    // Update Firestore
+    await _db.collection('users').doc(userId).update({
+      'isPasswordChangeNeeded': false,
+      'passwordLastChanged': FieldValue.serverTimestamp(),
+    });
+
+    // Log success
+    await ErrorLogger.logMessage('Password changed for user: $userId');
+
+  } on WrongPasswordException {
+    // Re-throw to let UI handle it
+    rethrow;
+    
+  } on FirebaseAuthException catch (e) {
+    await ErrorLogger.logError(
+      e,
+      StackTrace.current,
+      reason: 'Password change failed',
+      screen: 'UserService.changePassword',
+      additionalData: {'error_code': e.code, 'user_id': userId},
+    );
+
+    switch (e.code) {
+      case 'weak-password':
+        throw PasswordChangeException('Nova šifra je previše slaba');
+      case 'requires-recent-login':
+        throw PasswordChangeException('Molimo prijavite se ponovo');
+      case 'network-request-failed':
+        throw PasswordChangeException('Nema internet konekcije');
+      default:
+        throw PasswordChangeException('Greška pri promeni šifre: ${e.message}');
+    }
+
+  } catch (e, stackTrace) {
+    await ErrorLogger.logError(
+      e,
+      stackTrace,
+      reason: 'Password change failed - unexpected',
+      screen: 'UserService.changePassword',
+    );
+    throw PasswordChangeException('Neočekivana greška');
+  }
+}
+
+
+/// Retrieves all users from Firestore
+/// Returns list of [AppUser] objects
+/// Throws [GetAllUsersException] on errors
+Future<List<AppUser>> getAllUsers() async {
+  try {
+    // Fetch all users from Firestore
+    final querySnapshot = await _db
+        .collection('users')
+        .orderBy('name') // Sort by name for consistent ordering
+        .get();
+
+    // Check if collection is empty
+    if (querySnapshot.docs.isEmpty) {
+      return [];
+    }
+
+    // Map documents to AppUser objects
+    final users = querySnapshot.docs.map((doc) {
+      try {
+        final data = doc.data();
+        return AppUser.fromFirestore(data, doc.id, []);
+      } catch (e) {
+        // Log individual parsing errors but continue with other users
+        ErrorLogger.logError(
+          e,
+          StackTrace.current,
+          reason: 'Failed to parse user document',
+          screen: 'UserService.getAllUsers',
+          additionalData: {'user_id': doc.id},
+        );
+        return null; // Will be filtered out below
+      }
+    }).whereType<AppUser>().toList(); // Filter out null values
+
+    return users;
+
+  } on FirebaseException catch (e) {
+    // Handle Firestore-specific errors
+    await ErrorLogger.logError(
+      e,
+      StackTrace.current,
+      reason: 'Failed to fetch users from Firestore',
+      screen: 'UserService.getAllUsers',
+      additionalData: {'error_code': e.code},
+    );
+
+    throw GetAllUsersException(
+      'Greška pri učitavanju korisnika: ${e.message}',
+    );
+
+  } catch (e, stackTrace) {
+    // Handle unexpected errors
+    await ErrorLogger.logError(
+      e,
+      stackTrace,
+      reason: 'Unexpected error while fetching users',
+      screen: 'UserService.getAllUsers',
+    );
+
+    throw GetAllUsersException(
+      'Neočekivana greška pri učitavanju korisnika',
+    );
+  }
+}
+
+/// Retrieves admin user ID from Firestore
+/// Returns admin ID if found, null otherwise
+/// Throws [GetAdminIdException] on database errors
+Future<String?> getAdminId() async {
+  try {
+    final querySnapshot = await _db
+        .collection('users')
+        .where('isAdmin', isEqualTo: true)
+        .limit(1)
+        .get();
+
+    if (querySnapshot.docs.isEmpty) {
+      await ErrorLogger.logMessage('No admin user found in database');
+      return null;
+    }
+
+    final adminId = querySnapshot.docs.first.id;
+    
+    await ErrorLogger.logMessage('Admin ID retrieved: $adminId');
+    
+    return adminId;
+
+  } on FirebaseException catch (e) {
+    await ErrorLogger.logError(
+      e,
+      StackTrace.current,
+      reason: 'Failed to fetch admin ID from Firestore',
+      screen: 'UserService.getAdminId',
+      additionalData: {'error_code': e.code},
+    );
+
+    throw GetAdminIdException('Greška pri učitavanju admin podataka: ${e.message}');
+
+  } catch (e, stackTrace) {
+    await ErrorLogger.logError(
+      e,
+      stackTrace,
+      reason: 'Unexpected error while fetching admin ID',
+      screen: 'UserService.getAdminId',
+    );
+
+    throw GetAdminIdException('Neočekivana greška pri učitavanju admin podataka');
+  }
+}
   //Creates new user
   //1. In firebebase auth system
   //2. In database
@@ -109,7 +389,8 @@ class UserService {
         transaction.set(privateChatRef, {
           'type': 'private',
           'name': "Private chat",
-          'lastMessage': {  // ✅ MORA biti objekat, NE string!
+          'lastMessage': {
+            // ✅ MORA biti objekat, NE string!
             'text': '',
             'timestamp': FieldValue.serverTimestamp(),
             'senderId': '',
@@ -117,7 +398,7 @@ class UserService {
           },
           'lastMessageTimestamp': FieldValue.serverTimestamp(),
           'members': [],
-          'memberIds': [],  // ✅ Dodaj članove!
+          'memberIds': [], // ✅ Dodaj članove!
         });
 
         transaction.update(privateChatRef, {
@@ -174,58 +455,7 @@ class UserService {
     }
   }
 
-  //Using this method user can change his password.
-  Future<ChangePasswordResult> changePassword(
-      String userId, String currentPassword, String newPassword) async {
-    try {
-      User? user = _auth.currentUser;
-      if (user == null || user.email == null) {
-        return ChangePasswordResult(true, false);
-      }
 
-      AuthCredential credential = EmailAuthProvider.credential(
-        email: user.email!,
-        password: currentPassword,
-      );
-
-      UserCredential uc = await user.reauthenticateWithCredential(credential);
-      if (uc.user == null) {
-        return ChangePasswordResult(true, true);
-      }
-
-      await user.updatePassword(newPassword);
-
-      await _db
-          .collection('users')
-          .doc(userId)
-          .update({'isPasswordChangeNeeded': false});
-      return ChangePasswordResult(false, false);
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'invalid-credential') {
-        return ChangePasswordResult(true, true);
-      }
-
-      return ChangePasswordResult(true, false);
-    } catch (e) {
-      return ChangePasswordResult(true, false);
-    }
-  }
-
-  //Rerieves all users
-  Future<List<AppUser>> getAllUsers() async {
-    try {
-      QuerySnapshot querySnapshot = await _db.collection('users').get();
-
-      List<AppUser> users = querySnapshot.docs.map((doc) {
-        return AppUser.fromFirestore(
-            doc.data() as Map<String, dynamic>, doc.id, []);
-      }).toList();
-
-      return users;
-    } catch (e) {
-      return [];
-    }
-  }
 
   //Changes user type to be premium
   Future<bool> setPremiumFlag(String userId) async {
@@ -416,56 +646,12 @@ class UserService {
     }
   }
 
-  Future<AppUser?> login(String email, String password) async {
-    try {
-      UserCredential userCredential = await _auth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-
-      User? user = userCredential.user;
-      if (user != null) {
-        await user.getIdToken(true);
-        DocumentSnapshot userDoc =
-            await _db.collection('users').doc(user.uid).get();
-
-        if (userDoc.exists) {
-          return AppUser.fromFirestore(
-              userDoc.data() as Map<String, dynamic>, user.uid, []);
-        } else {
-          return null;
-        }
-      } else {
-        return null;
-      }
-    } on FirebaseAuthException {
-      return null;
-    }
-  }
-
   // Funkcija za logout
   Future<void> logout() async {
     await _auth.signOut();
   }
 
-  Future<String?> getAdminId() async {
-    try {
-      var querySnapshot = await _db
-          .collection('users')
-          .where('isAdmin', isEqualTo: true)
-          .limit(1) // Očekujemo samo jednog admina
-          .get();
 
-      if (querySnapshot.docs.isNotEmpty) {
-        return querySnapshot.docs.first.id;
-      } else {
-        return null; // Nema admina
-      }
-    } catch (e) {
-      print("Error getting admin ID: $e");
-      return null;
-    }
-  }
 
   Future<void> updateUserProfileImage(String userId, File file) async {
     try {

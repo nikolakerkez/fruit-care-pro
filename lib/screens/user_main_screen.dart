@@ -1,16 +1,16 @@
+import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
+
 import 'package:fruit_care_pro/models/chat_item.dart';
-import 'package:fruit_care_pro/models/chat_item_member.dart';
 import 'package:fruit_care_pro/models/user.dart';
+import 'package:fruit_care_pro/services/chat_service.dart';
+import 'package:fruit_care_pro/current_user_service.dart';
+import 'package:fruit_care_pro/shared_ui_components.dart';
+
 import 'package:fruit_care_pro/screens/advertisement_categories_screen.dart';
 import 'package:fruit_care_pro/screens/private_chat_screen.dart';
-import 'package:fruit_care_pro/services/chat_service.dart';
-import 'package:fruit_care_pro/services/user_service.dart';
-import 'package:fruit_care_pro/shared_ui_components.dart';
 import 'package:fruit_care_pro/widgets/user_details_screen.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/material.dart';
-import 'package:timeago/timeago.dart' as timeago;
-import 'package:fruit_care_pro/current_user_service.dart';
 
 class UserMainScreen extends StatefulWidget {
   const UserMainScreen({super.key});
@@ -20,39 +20,70 @@ class UserMainScreen extends StatefulWidget {
 }
 
 class _UserMainScreenState extends State<UserMainScreen> {
-  final UserService _userService = UserService();
-  final ChatService _chatService = ChatService();
+  // Services
+  late final ChatService _chatService;
 
-  Map<String, AppUser> _usersMap = {};
-  late final AppUser user;
+  // State
+  late final AppUser _currentUser;
 
   @override
   void initState() {
     super.initState();
-    user = CurrentUserService.instance.currentUser!;
-    _loadUsers();
-  }
-
-  Future<void> _loadUsers() async {
-    final allUsers = await _userService.getAllUsers();
-    if (mounted) {
-      setState(() {
-        _usersMap = {for (var user in allUsers) user.id: user};
+    
+    // Get current user
+    final currentUser = CurrentUserService.instance.currentUser;
+    if (currentUser == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
       });
+      return;
     }
+    _currentUser = currentUser;
+
+    // Get service from Provider
+    _chatService = context.read<ChatService>();
   }
 
   void _onItemTapped(int index) {
+    // Don't navigate if already on current tab
+    if (index == 0) return;
+
     final routes = [
       () => const UserMainScreen(),
       () => const AdvertisementCategoriesScreen(),
-      () => UserDetailsScreen(userId: user.id),
+      () => UserDetailsScreen(userId: _currentUser.id),
     ];
 
     if (index < routes.length) {
       Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => routes[index]()),
+      );
+    }
+  }
+
+  void _handleChatTap(ChatItem chat) {
+    if (chat.isGroup) {
+      Navigator.pushNamed(
+        context,
+        '/group-chat',
+        arguments: {
+          'chatId': chat.id,
+          'fruitTypeId': chat.id,
+          'fruitTypeName': chat.name,
+        },
+      );
+    } else {
+      final otherUserId = chat.getOtherUser(_currentUser.id) ?? '';
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => PrivateChatScreen.asUser(
+            chatId: chat.id,
+            userId: otherUserId,
+          ),
+        ),
       );
     }
   }
@@ -75,6 +106,7 @@ class _UserMainScreenState extends State<UserMainScreen> {
           children: [
             AppBar(
               elevation: 0,
+              centerTitle: true,
               backgroundColor: Colors.transparent,
               title: const Text(
                 'Poruke',
@@ -93,7 +125,7 @@ class _UserMainScreenState extends State<UserMainScreen> {
 
   Widget _buildBody() {
     return StreamBuilder<List<ChatItem>>(
-      stream: _chatService.getChatsStreamForUser(user.id),
+      stream: _chatService.getChatsStreamForUser(_currentUser.id),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -114,41 +146,13 @@ class _UserMainScreenState extends State<UserMainScreen> {
             final chat = snapshot.data![index];
             return _ChatListTile(
               chat: chat,
-              userId: user.id,
-              usersMap: _usersMap,
+              userId: _currentUser.id,
               onTap: () => _handleChatTap(chat),
             );
           },
         );
       },
     );
-  }
-
-  void _handleChatTap(ChatItem chat) {
-    if (chat.isGroup) {
-      Navigator.pushNamed(
-        context,
-        '/group-chat',
-        arguments: {
-          'chatId': chat.id,
-          'fruitTypeId': chat.id,
-          'fruitTypeName': chat.name,
-        },
-      );
-    } else {
-
-    final otherUserId = chat.getOtherUser(user.id) ?? '';
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => PrivateChatScreen.asUser(
-          chatId: chat.id,
-          userId: otherUserId,
-        ),
-      ),
-    );
-    }
   }
 
   Widget _buildBottomNavigationBar() {
@@ -186,17 +190,18 @@ class _UserMainScreenState extends State<UserMainScreen> {
   }
 }
 
-// Izdvojen widget za chat list tile
+// ============================================================================
+// CHAT LIST TILE WIDGET
+// ============================================================================
+
 class _ChatListTile extends StatelessWidget {
   final ChatItem chat;
   final String userId;
-  final Map<String, AppUser> usersMap;
   final VoidCallback onTap;
 
   const _ChatListTile({
     required this.chat,
     required this.userId,
-    required this.usersMap,
     required this.onTap,
   });
 

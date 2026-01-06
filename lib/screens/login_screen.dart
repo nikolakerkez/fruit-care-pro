@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:fruit_care_pro/current_user_service.dart';
+import 'package:fruit_care_pro/exceptions/login_exception.dart';
+import 'package:fruit_care_pro/utils/error_logger.dart';
 import 'package:provider/provider.dart';
 import 'package:fruit_care_pro/shared_ui_components.dart';
 import 'package:fruit_care_pro/models/user.dart';
@@ -22,17 +25,22 @@ class _LoginScreenState extends State<LoginScreen> {
 
   // Form key for validation
   final _formKey = GlobalKey<FormState>();
-  
+
   // UI state
   bool _obscurePassword = true;
   bool _isLoading = false;
   String? _errorMessage;
 
-  // Service - should be injected via Provider/GetIt in production
-  final UserService _userService = UserService();
+  late final UserService _userService;
 
   // Email domain constant - should be in config file
   static const String _emailDomain = '@fruitcarepro.com';
+
+  @override
+  void initState() {
+    super.initState();
+    _userService = context.read<UserService>();
+  }
 
   @override
   void dispose() {
@@ -89,21 +97,42 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       if (!appUser.isActive) {
-        _showError('Vaš nalog nije više aktivan, kontaktirajte administratora.');
+        _showError(
+            'Vaš nalog nije više aktivan, kontaktirajte administratora.');
         return;
       }
 
       // Update user state
       Provider.of<UserNotifier>(context, listen: false).setUser(appUser);
 
+      CurrentUserService.instance.setCurrentUser(appUser);
+
       // Navigate based on user status
       _navigateToNextScreen(appUser);
-      
-    } catch (e) {
+    } on LoginException catch (e) {
+      // Handle known login errors with user-friendly messages
       if (!mounted) return;
-      _showError('Došlo je do greške prilikom prijavljivanja. Pokušajte ponovo.');
-      // TODO: Log error to monitoring service
-      debugPrint('Login error: $e');
+      _showError(e.message);
+
+      await ErrorLogger.logError(
+        e,
+        StackTrace.current,
+        reason: 'Login failed - known error',
+        screen: 'LoginScreen',
+        additionalData: {'error_message': e.message},
+      );
+    } catch (e, stackTrace) {
+      // Handle unexpected errors
+      if (!mounted) return;
+      _showError('Došlo je do neočekivane greške. Pokušajte ponovo.');
+
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Login failed - unexpected error',
+        screen: 'LoginScreen',
+        fatal: false,
+      );
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -121,7 +150,7 @@ class _LoginScreenState extends State<LoginScreen> {
     Widget nextScreen;
 
     if (user.isPasswordChangeNeeded) {
-      nextScreen = ChangePasswordScreen(appUser: user);
+      nextScreen = ChangePasswordScreen();
     } else if (user.isAdmin) {
       nextScreen = const AdminMainScreen();
     } else {
@@ -178,7 +207,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
               // Username field
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
                 child: generateTextField(
                   labelText: "Korisničko ime",
                   controller: _usernameController,
@@ -190,7 +220,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
               // Password field
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
                 child: generateTextField(
                   labelText: "Šifra",
                   controller: _passwordController,
@@ -200,7 +231,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   enabled: !_isLoading,
                   sufixIconWidget: IconButton(
                     icon: Icon(
-                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                      _obscurePassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
                     ),
                     onPressed: () {
                       setState(() => _obscurePassword = !_obscurePassword);
@@ -211,7 +244,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
               // Login button
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
                 child: _isLoading
                     ? const CircularProgressIndicator()
                     : generateButton(

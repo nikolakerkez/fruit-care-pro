@@ -1,25 +1,29 @@
 import 'dart:io';
-import 'package:fruit_care_pro/current_user_service.dart';
-import 'package:fruit_care_pro/widgets/date_separator.dart';
-import 'package:fruit_care_pro/models/user.dart';
-import 'package:fruit_care_pro/screens/full_screen_image_viewer.dart';
-import 'package:fruit_care_pro/widgets/chat_bubble.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:fruit_care_pro/services/chat_service.dart';
-import 'package:fruit_care_pro/shared_ui_components.dart';
-import 'package:fruit_care_pro/services/user_service.dart';
-import 'dart:async';
-import 'package:fruit_care_pro/widgets/user_details_screen.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:fruit_care_pro/exceptions/chat_exception.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
+
+import 'package:fruit_care_pro/models/user.dart';
+import 'package:fruit_care_pro/services/chat_service.dart';
+import 'package:fruit_care_pro/services/user_service.dart';
+import 'package:fruit_care_pro/current_user_service.dart';
+import 'package:fruit_care_pro/shared_ui_components.dart';
+import 'package:fruit_care_pro/utils/error_logger.dart';
+import 'package:fruit_care_pro/widgets/date_separator.dart';
+import 'package:fruit_care_pro/widgets/chat_bubble.dart';
+import 'package:fruit_care_pro/widgets/user_details_screen.dart';
+import 'package:fruit_care_pro/screens/full_screen_image_viewer.dart';
 
 enum ChatUserRole { admin, user }
 
 class PrivateChatScreen extends StatefulWidget {
   final String? chatId;
   final String? userId;
-  final ChatUserRole role; // 🔥 Novi parametar
+  final ChatUserRole role;
 
   const PrivateChatScreen({
     super.key,
@@ -28,7 +32,7 @@ class PrivateChatScreen extends StatefulWidget {
     required this.role,
   });
 
-  // 🔥 Factory konstruktori za lakše pozivanje
+  /// Factory constructor for admin user
   factory PrivateChatScreen.asAdmin({
     String? chatId,
     String? userId,
@@ -40,6 +44,7 @@ class PrivateChatScreen extends StatefulWidget {
     );
   }
 
+  /// Factory constructor for regular user
   factory PrivateChatScreen.asUser({
     String? chatId,
     String? userId,
@@ -57,8 +62,8 @@ class PrivateChatScreen extends StatefulWidget {
 
 class _PrivateChatScreenState extends State<PrivateChatScreen> {
   // Services
-  final UserService _userService = UserService();
-  final ChatService _chatService = ChatService();
+  late final UserService _userService;
+  late final ChatService _chatService;
   final ImagePicker _imagePicker = ImagePicker();
 
   // Controllers
@@ -68,86 +73,163 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       StreamController<List<DocumentSnapshot>>.broadcast();
 
   // State variables
-  String _currentUserId = '';  // 🔥 ID trenutnog korisnika (admin ili user)
-  String _otherUserId = '';    // 🔥 ID osobe sa kojom pričamo
+  String _currentUserId = '';
+  String _otherUserId = '';
   String _chatId = '';
-  AppUser? _otherUser;         // 🔥 Osoba sa kojom pričamo
+  AppUser? _otherUser;
   bool _isLoading = true;
   bool _hasMoreData = true;
+  String? _errorMessage;
 
   // Pagination
   DocumentSnapshot? _lastDocument;
   final List<List<DocumentSnapshot>> _allPagedResults = [<DocumentSnapshot>[]];
   final List<StreamSubscription> _subscriptions = [];
 
+  // User state
   AppUser? get _currentUser => CurrentUserService.instance.currentUser;
   bool get _isAdmin => widget.role == ChatUserRole.admin;
 
   @override
   void initState() {
     super.initState();
-    _initialize();
-    _setupScrollListener();
+    _initializeScreen();
   }
 
   @override
   void dispose() {
+    // Cancel all subscriptions
     for (var subscription in _subscriptions) {
       subscription.cancel();
     }
     _subscriptions.clear();
+
+    // Close stream controller
     _chatStreamController.close();
+
+    // Dispose controllers
     _messageController.dispose();
     _scrollController.dispose();
+
     super.dispose();
   }
 
   // ==================== INITIALIZATION ====================
 
-  Future<void> _initialize() async {
-    await _extractRouteParameters();
-    await _loadCurrentUserId();
-    await _loadOtherUser();
-    await _markMessagesAsRead();
-    _finalizeInitialization();
-  }
+  /// Initialize screen with all necessary data
+  Future<void> _initializeScreen() async {
+    try {
+      // Get current user
+      final currentUser = CurrentUserService.instance.currentUser;
+      if (currentUser == null) {
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/login');
+        }
+        return;
+      }
+      _currentUserId = currentUser.id;
 
-  Future<void> _extractRouteParameters() async {
-    if (widget.userId != null) {
-      _otherUserId = widget.userId!;
-    }
-    if (widget.chatId != null) {
-      _chatId = widget.chatId!;
-    }
-  }
+      // Get services from Provider
+      _userService = context.read<UserService>();
+      _chatService = context.read<ChatService>();
 
-  Future<void> _loadCurrentUserId() async {
-    _currentUserId = CurrentUserService.instance.currentUser!.id;
-  }
+      // Extract route parameters
+      await _extractRouteParameters();
 
-  Future<void> _loadOtherUser() async {
-    if (_otherUserId.isEmpty) return;
+      // Load other user info
+      await _loadOtherUser();
 
-    final user = await _userService.getUserById(_otherUserId);
-    if (mounted) {
-      setState(() => _otherUser = user);
-    }
-  }
+      // Mark messages as read
+      await _markMessagesAsRead();
 
-  Future<void> _markMessagesAsRead() async {
-    if (_chatId.isNotEmpty && _currentUserId.isNotEmpty) {
-      await _chatService.markMessagesAsRead(_chatId, _currentUserId);
-    }
-  }
+      // Setup scroll listener for pagination
+      _setupScrollListener();
 
-  void _finalizeInitialization() {
-    if (_currentUserId.isNotEmpty && _otherUserId.isNotEmpty && _chatId.isNotEmpty) {
+      // Finalize initialization
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _isLoading = false;
+          _errorMessage = null;
+        });
+      }
+
+    } catch (e, stackTrace) {
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Failed to initialize PrivateChatScreen',
+        screen: 'PrivateChatScreen',
+        additionalData: {
+          'chat_id': _chatId,
+          'other_user_id': _otherUserId,
+          'role': _isAdmin ? 'admin' : 'user',
+        },
+      );
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Greška pri učitavanju chata';
+        });
       }
     }
   }
 
+  /// Extract route parameters from widget
+  Future<void> _extractRouteParameters() async {
+    _chatId = widget.chatId ?? '';
+    _otherUserId = widget.userId ?? '';
+
+    if (_chatId.isEmpty) {
+      throw Exception('Chat ID is required');
+    }
+
+    if (_otherUserId.isEmpty) {
+      throw Exception('Other user ID is required');
+    }
+  }
+
+  /// Load other user information
+  Future<void> _loadOtherUser() async {
+    if (_otherUserId.isEmpty) return;
+
+    try {
+      final user = await _userService.getUserById(_otherUserId);
+      
+      if (mounted) {
+        setState(() => _otherUser = user);
+      }
+    } catch (e, stackTrace) {
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Failed to load other user',
+        screen: 'PrivateChatScreen',
+        additionalData: {'other_user_id': _otherUserId},
+      );
+      // Non-critical - continue without user info
+    }
+  }
+
+  /// Mark all messages as read for current user
+  Future<void> _markMessagesAsRead() async {
+    if (_chatId.isEmpty || _currentUserId.isEmpty) return;
+
+    try {
+      await _chatService.markMessagesAsRead(_chatId, _currentUserId);
+    } catch (e, stackTrace) {
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Failed to mark messages as read',
+        screen: 'PrivateChatScreen',
+        additionalData: {'chat_id': _chatId},
+      );
+      // Non-critical error, continue
+    }
+  }
+
+  /// Setup scroll listener for pagination
   void _setupScrollListener() {
     _scrollController.addListener(() {
       if (_isAtScrollThreshold && !_scrollController.position.outOfRange) {
@@ -156,17 +238,20 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     });
   }
 
+  /// Check if scroll is at threshold for loading more messages
   bool get _isAtScrollThreshold {
     return _scrollController.offset >= _scrollController.position.maxScrollExtent;
   }
 
   // ==================== CHAT LOADING ====================
 
+  /// Stream of chat messages with pagination
   Stream<List<DocumentSnapshot>> _listenToChatsRealTime() {
     _loadMoreMessages();
     return _chatStreamController.stream;
   }
 
+  /// Load more messages (pagination)
   void _loadMoreMessages() {
     if (!_hasMoreData || _chatId.isEmpty) return;
 
@@ -175,12 +260,21 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
 
     final subscription = query.snapshots().listen(
       (snapshot) => _handleMessagesSnapshot(snapshot, currentRequestIndex),
-      onError: (error) => debugPrint('❌ Error loading messages: $error'),
+      onError: (error, stackTrace) {
+        ErrorLogger.logError(
+          error,
+          stackTrace,
+          reason: 'Error in messages stream',
+          screen: 'PrivateChatScreen',
+          additionalData: {'chat_id': _chatId},
+        );
+      },
     );
 
     _subscriptions.add(subscription);
   }
 
+  /// Build Firestore query for messages
   Query<Map<String, dynamic>> _buildMessagesQuery() {
     Query<Map<String, dynamic>> query = FirebaseFirestore.instance
         .collection('chats')
@@ -196,9 +290,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     return query;
   }
 
-  void _handleMessagesSnapshot(QuerySnapshot snapshot, int currentRequestIndex) {
+  /// Handle snapshot from messages query
+  void _handleMessagesSnapshot(
+    QuerySnapshot snapshot,
+    int currentRequestIndex,
+  ) {
     if (!mounted) return;
 
+    // Empty snapshot - no more messages
     if (snapshot.docs.isEmpty) {
       if (!_chatStreamController.isClosed) {
         _chatStreamController.add([]);
@@ -207,18 +306,29 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       return;
     }
 
+    // Update paged results
     _updatePagedResults(snapshot.docs, currentRequestIndex);
+
+    // Emit all messages
     _emitAllMessages();
+
+    // Update pagination state
     _updatePaginationState(snapshot.docs, currentRequestIndex);
   }
 
+  /// Emit all messages to stream
   void _emitAllMessages() {
     if (_chatStreamController.isClosed) return;
+
     final allMessages = _allPagedResults.expand((page) => page).toList();
     _chatStreamController.add(allMessages);
   }
 
-  void _updatePagedResults(List<DocumentSnapshot> docs, int currentRequestIndex) {
+  /// Update paged results with new documents
+  void _updatePagedResults(
+    List<DocumentSnapshot> docs,
+    int currentRequestIndex,
+  ) {
     if (currentRequestIndex < _allPagedResults.length) {
       _allPagedResults[currentRequestIndex] = docs;
     } else {
@@ -226,7 +336,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     }
   }
 
-  void _updatePaginationState(List<DocumentSnapshot> docs, int currentRequestIndex) {
+  /// Update pagination state
+  void _updatePaginationState(
+    List<DocumentSnapshot> docs,
+    int currentRequestIndex,
+  ) {
     if (currentRequestIndex == _allPagedResults.length - 1) {
       _lastDocument = docs.last;
     }
@@ -235,19 +349,54 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
 
   // ==================== MESSAGE SENDING ====================
 
+  /// Send text message
   Future<void> _sendTextMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
     _messageController.clear();
-    await _sendMessage(messageText: text);
+
+    try {
+      await _sendMessage(messageText: text);
+    } on SendMessageException catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (e, stackTrace) {
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Failed to send text message',
+        screen: 'PrivateChatScreen',
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Greška pri slanju poruke'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
+  /// Send image message
   Future<void> _sendImageMessage() async {
-    final pickedFile = await _imagePicker.pickImage(source: ImageSource.gallery);
+    try {
+      final pickedFile = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+      );
 
-    if (pickedFile != null) {
+      if (pickedFile == null) return;
+
       final imageFile = File(pickedFile.path);
+
       await _chatService.sendMessage(
         _chatId,
         _currentUserId,
@@ -255,13 +404,40 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         '',
         imageFile,
       );
+    } on SendMessageException catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (e, stackTrace) {
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Failed to send image message',
+        screen: 'PrivateChatScreen',
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Greška pri slanju slike'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
+  /// Send message to chat
   Future<void> _sendMessage({String? messageText, String? imageUrl}) async {
     if (_chatId.isEmpty || _otherUserId.isEmpty) return;
 
     final message = messageText ?? imageUrl ?? '';
+
     await _chatService.sendMessage(
       _chatId,
       _currentUserId,
@@ -273,6 +449,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
 
   // ==================== NAVIGATION ====================
 
+  /// Navigate to user details screen
   void _navigateToUserDetails(String userId) {
     Navigator.push(
       context,
@@ -282,7 +459,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     );
   }
 
-  void _navigateToImageViewer(String? imageUrl, String? localPath, String? messageId) {
+  /// Navigate to full screen image viewer
+  void _navigateToImageViewer(
+    String? imageUrl,
+    String? localPath,
+    String? messageId,
+  ) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -299,11 +481,13 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Loading state
     if (_isLoading) {
       return _buildLoadingScreen();
     }
 
-    if (_chatId.isEmpty) {
+    // Error state
+    if (_errorMessage != null || _chatId.isEmpty) {
       return _buildErrorScreen();
     }
 
@@ -318,6 +502,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     );
   }
 
+  /// Build loading screen
   Widget _buildLoadingScreen() {
     return Scaffold(
       appBar: AppBar(title: const Text('')),
@@ -325,13 +510,29 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     );
   }
 
+  /// Build error screen
   Widget _buildErrorScreen() {
     return Scaffold(
-      appBar: AppBar(title: const Text('Fruit Care Pro')),
-      body: const Center(child: Text('Chat ID nije dostupan.')),
+      appBar: AppBar(title: const Text('Greška')),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+            const SizedBox(height: 16),
+            Text(_errorMessage ?? 'Chat ID nije dostupan.'),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Nazad'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
+  /// Build app bar
   PreferredSizeWidget _buildAppBar() {
     return PreferredSize(
       preferredSize: const Size.fromHeight(kToolbarHeight + 3),
@@ -341,6 +542,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
           children: [
             AppBar(
               elevation: 0,
+              centerTitle: true,
               backgroundColor: Colors.transparent,
               title: _buildAppBarTitle(),
             ),
@@ -351,10 +553,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     );
   }
 
+  /// Build app bar title with avatar and name
   Widget _buildAppBarTitle() {
-    // 🔥 Admin vidi ime korisnika, User vidi "Admin"
+    // Admin sees user name, regular user sees "Admin"
     final displayName = _isAdmin ? (_otherUser?.name ?? '') : 'Admin';
-    
+
     return Row(
       children: [
         const SizedBox(width: 30),
@@ -374,12 +577,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     );
   }
 
+  /// Build avatar
   Widget _buildAvatar(String? thumbUrl) {
     return Container(
       width: 50,
       height: 50,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
+        color: Colors.grey[300],
         border: Border.all(
           color: Colors.brown[300] ?? Colors.brown,
           width: 2,
@@ -401,14 +606,17 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     );
   }
 
+  /// Build messages list
   Widget _buildMessagesList() {
     return StreamBuilder<List<DocumentSnapshot>>(
       stream: _listenToChatsRealTime(),
       builder: (context, snapshot) {
+        // Loading state
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
 
+        // Empty state
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return const Center(child: Text('Započnite razgovor.'));
         }
@@ -433,7 +641,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                 ChatBubble(
                   messageData: messageData,
                   isCurrentUser: messageData['senderId'] == _currentUserId,
-                  otherUserId: _otherUserId, // 🔥 Prosledi otherUserId
+                  otherUserId: _otherUserId,
                   onImageTap: () => _navigateToImageViewer(
                     messageData['imageUrl'] ?? messageData['thumbUrl'],
                     messageData['localImagePath'],
@@ -448,6 +656,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     );
   }
 
+  /// Check if should show date separator
   bool _shouldShowDateSeparator(List<DocumentSnapshot> messages, int index) {
     if (index == messages.length - 1) return true;
 
@@ -465,14 +674,16 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     return !_isSameDay(currentDate, nextDate);
   }
 
+  /// Check if two dates are on same day
   bool _isSameDay(DateTime date1, DateTime date2) {
     return date1.year == date2.year &&
         date1.month == date2.month &&
         date1.day == date2.day;
   }
 
+  /// Build message input field
   Widget _buildMessageInput() {
-    // 🔥 Samo user treba premium check
+    // Only regular users need premium check, admin always has access
     final isPremium = _isAdmin ? true : (_currentUser?.isPremium ?? false);
 
     return SafeArea(

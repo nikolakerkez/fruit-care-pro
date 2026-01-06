@@ -1,201 +1,198 @@
 import 'dart:io';
-import 'package:fruit_care_pro/models/chat_item.dart';
-import 'package:fruit_care_pro/services/documents_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:fruit_care_pro/exceptions/chat_exception.dart';
+import 'package:fruit_care_pro/models/chat_item.dart';
+import 'package:fruit_care_pro/utils/error_logger.dart';
 
 class ChatService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
+  /// Returns a stream of chats for a specific user
+  /// Automatically updates when chats change in Firestore
+  /// [userId] - ID of the user whose chats to retrieve
+  /// Returns stream of [ChatItem] list, sorted by last message timestamp
   Stream<List<ChatItem>> getChatsStreamForUser(String userId) {
-    debugPrint('🔵 Starting getAdminChatsStream for admin: $userId');
-
-    return _db
-        .collection('chats')
-        .where('memberIds', arrayContains: userId)
-        .orderBy('lastMessageTimestamp', descending: true)
-        .snapshots()
-        .map((snap) {
-      debugPrint('🟢 Stream received ${snap.docs.length} chats');
-
-      final chats = snap.docs.map((doc) {
-        debugPrint('  - Chat: ${doc.id}');
-        try {
-          return ChatItem.fromFirestore(doc);
-        } catch (e) {
-          debugPrint('  ❌ Error parsing chat ${doc.id}: $e');
-          rethrow;
-        }
-      }).toList();
-
-      debugPrint('✅ Returning ${chats.length} chats');
-      return chats;
-    }).handleError((error) {
-      debugPrint('🔴 Error in stream: $error');
-      return <ChatItem>[];
-    });
-  }
-
-  Future sendMessage(String chatId, String senderId, String receiverId,
-      String text, File? file) async {
-    // Fetch chat for provided identifier
-    var chatDoc = await _db.collection('chats').doc(chatId).get();
-
-    if (!chatDoc.exists) {
-      // If chat does not exist, create new
-      await _createNewChat(chatId, senderId, receiverId);
-    }
-
-    if (file != null) {
-      await sendImageToChat(
-          chatId: chatId, senderId: senderId, imageFile: file);
-    } else {
-      // Then the message is added to the chat
-      await sendMessageToChat(
-          chatId: chatId, senderId: senderId, messageText: text);
-    }
-  }
-
-  Future<void> createNewGroupChat(
-      String chatId, String chatName, List<String> userIds) async {
     try {
-      List<Map<String, dynamic>> members = userIds
-          .map((s) => {
-                'userId': s,
-                'memberSince': FieldValue.serverTimestamp(),
-                'messagesVisibleFrom': FieldValue.serverTimestamp(),
-              })
-          .toList();
-
-      await _db.collection('chats').doc(chatId).set({
-        'type': 'group',
-        'name': chatName,
-        'lastMessage': '',
-        'lastMessageTimestamp': FieldValue.serverTimestamp(),
-        'members': [],
-        'memberIds': []
-      });
-    } catch (e) {
-      print('Error creating group chat: $e');
-    }
-  }
-
-  Future<void> updateGroupChatName(
-    String chatId,
-    String chatName,
-  ) async {
-    try {
-      // Ažuriramo voćnu vrstu u kolekciji 'fruit_types' pomoću ID-a
-      await _db.collection('chats').doc(chatId).update({'name': chatName});
-
-      print("Voćna vrsta uspešno ažurirana.");
-    } catch (e) {
-      print("Greška prilikom uordated group chat name -ß $e");
-    }
-  }
-
-  Future<void> addUserChat(String chatId, String userId) async {
-    try {
-      await _db
-          .collection('chats')
-          .doc(chatId)
-          .collection('members')
-          .doc(userId) // dokument za tog usera
-          .set({
-        'userId': userId,
-        'periods': [
-          {
-            'joinedAt': DateTime.now(),
-            'leftAt': null,
-          }
-        ],
-        'lastMessage': {
-          'message': "-", // inicijalno prazno
-          'timestamp': FieldValue.serverTimestamp(),
-          'read': false, // inicijalno nije pročitao
-        },
-        'memberSince': FieldValue.serverTimestamp(),
-        'messagesVisibleFrom': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      await FirebaseFirestore.instance.collection('chats').doc(chatId).update({
-        'memberIds': FieldValue.arrayUnion([userId])
-      });
-    } catch (e) {
-      print('Error during adding user to chat ' + e.toString());
-    }
-  }
-
-  Future<void> createNewPrivateChat(String chatId, String chatName) async {
-    try {
-      await _db.collection('chats').doc(chatId).set({
-        'type': 'private',
-        'name': chatName,
-        'lastMessage': '',
-        'lastMessageTimestamp': FieldValue.serverTimestamp(),
-        'members': [],
-        'memberIds': []
-      });
-    } catch (e) {
-      print('Error creating group chat: $e');
-    }
-  }
-
-  Future<Map<String, String?>?> getChatTitlePrivateChat(
-      DocumentSnapshot? chatDoc, String? currentUserId) async {
-    if (chatDoc == null || currentUserId == null) return null;
-
-    try {
-      List<dynamic>? memberIds = chatDoc.get('memberIds');
-      if (memberIds == null || memberIds.isEmpty) return null;
-
-      String? otherUserId =
-          memberIds.firstWhere((id) => id != currentUserId, orElse: () => null);
-
-      if (otherUserId == null) return null;
-
-      DocumentSnapshot userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(otherUserId)
-          .get();
-
-      String? name;
-      if (userDoc.exists) {
-        Map<String, dynamic>? data = userDoc.data() as Map<String, dynamic>?;
-        name = data?['name'];
+      // Validate input
+      if (userId.isEmpty) {
+        ErrorLogger.logMessage(
+          'Warning: getChatsStreamForUser called with empty userId',
+        );
+        return Stream.value([]);
       }
 
-      return {
-        "userId": otherUserId,
-        "name": name ?? otherUserId,
-      };
-    } catch (e) {
-      print("Greška u getChatTitlePrivateChat: $e");
-      return null;
+      debugPrint('🔵 Starting chat stream for user: $userId');
+
+      return _db
+          .collection('chats')
+          .where('memberIds', arrayContains: userId)
+          .orderBy('lastMessageTimestamp', descending: true)
+          .snapshots()
+          .map((snapshot) {
+        debugPrint('🟢 Stream received ${snapshot.docs.length} chat documents');
+
+        final chats = <ChatItem>[];
+        final failedChatIds = <String>[];
+
+        // Parse each chat document
+        for (final doc in snapshot.docs) {
+          try {
+            final chat = ChatItem.fromFirestore(doc);
+            chats.add(chat);
+            debugPrint('  ✅ Parsed chat: ${doc.id} - ${chat.name ?? "Private"}');
+          } catch (e, stackTrace) {
+            // Log parsing error but continue with other chats
+            failedChatIds.add(doc.id);
+
+            ErrorLogger.logError(
+              e,
+              stackTrace,
+              reason: 'Failed to parse chat document',
+              screen: 'ChatService.getChatsStreamForUser',
+              additionalData: {
+                'chat_id': doc.id,
+                'user_id': userId,
+              },
+            );
+
+            debugPrint('  ❌ Failed to parse chat ${doc.id}: $e');
+          }
+        }
+
+        // Log warning if some chats failed
+        if (failedChatIds.isNotEmpty) {
+          debugPrint(
+            '⚠️ ${failedChatIds.length} chats failed to parse: ${failedChatIds.join(", ")}',
+          );
+        }
+
+        debugPrint('✅ Returning ${chats.length} valid chats');
+        return chats;
+      }).handleError((error, stackTrace) {
+        // Log stream errors
+        ErrorLogger.logError(
+          error,
+          stackTrace,
+          reason: 'Error in chat stream',
+          screen: 'ChatService.getChatsStreamForUser',
+          additionalData: {'user_id': userId},
+        );
+
+        debugPrint('🔴 Stream error: $error');
+
+        // Propagate error to UI
+        throw error;
+      });
+    } catch (e, stackTrace) {
+      // Handle initialization errors
+      ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Failed to initialize chat stream',
+        screen: 'ChatService.getChatsStreamForUser',
+        additionalData: {'user_id': userId},
+      );
+
+      debugPrint('🔴 Failed to create stream: $e');
+
+      return Stream.error(e, stackTrace);
     }
   }
 
-// If user and admin does not have already created chat (communication)
-// this method will initialize their chat.
+  /// Sends a message (text or image) to a chat
+  /// Creates chat if it doesn't exist
+  Future<String> sendMessage(
+    String chatId,
+    String senderId,
+    String receiverId,
+    String text,
+    File? file,
+  ) async {
+    try {
+      // Validate inputs
+      if (chatId.isEmpty || senderId.isEmpty) {
+        throw SendMessageException('Chat ID and sender ID are required');
+      }
+
+      // Check if chat exists
+      final chatDoc = await _db.collection('chats').doc(chatId).get();
+
+      if (!chatDoc.exists) {
+        // Create new chat if it doesn't exist
+        await _createNewChat(chatId, senderId, receiverId);
+      }
+
+      // Send image or text message
+      if (file != null) {
+        return await sendImageToChat(
+          chatId: chatId,
+          senderId: senderId,
+          imageFile: file,
+        );
+      } else {
+        return await sendMessageToChat(
+          chatId: chatId,
+          senderId: senderId,
+          messageText: text,
+        );
+      }
+    } on SendMessageException {
+      rethrow;
+    } catch (e, stackTrace) {
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Failed to send message',
+        screen: 'ChatService.sendMessage',
+        additionalData: {
+          'chat_id': chatId,
+          'sender_id': senderId,
+          'has_file': file != null,
+        },
+      );
+      throw SendMessageException('Greška pri slanju poruke');
+    }
+  }
+
+  /// Creates a new chat between two users
   Future<void> _createNewChat(
-      String chatId, String user1Id, String user2Id) async {
+    String chatId,
+    String user1Id,
+    String user2Id,
+  ) async {
     try {
       await _db.collection('chats').doc(chatId).set({
         'user1Id': user1Id,
         'user2Id': user2Id,
+        'memberIds': [user1Id, user2Id],
         'lastMessage': '',
         'lastMessageTimestamp': FieldValue.serverTimestamp(),
         'isLastMessageRead': 0,
         'lastMessageSenderId': '',
-        'lastMessageReceiverId': ''
+        'lastMessageReceiverId': '',
       });
-    } catch (e) {
-      print('Error creating chat: $e');
+
+      debugPrint('✅ Created new chat: $chatId');
+    } on FirebaseException catch (e) {
+      await ErrorLogger.logError(
+        e,
+        StackTrace.current,
+        reason: 'Failed to create new chat',
+        screen: 'ChatService._createNewChat',
+        additionalData: {
+          'chat_id': chatId,
+          'user1_id': user1Id,
+          'user2_id': user2Id,
+        },
+      );
+      throw CreateChatException('Greška pri kreiranju chata: ${e.message}');
     }
   }
 
+  /// Sends a text message to a chat
   Future<String> sendMessageToChat({
     required String chatId,
     required String senderId,
@@ -204,25 +201,37 @@ class ChatService {
     String? thumbUrl,
   }) async {
     try {
-      print('Sending message...');
+      debugPrint('📤 Sending text message to chat: $chatId');
 
-      // 1. DOHVATI SVE ČLANOVE PRE TRANSACTION-A
-      final membersSnapshot =
-          await _db.collection('chats').doc(chatId).collection('members').get();
+      // Validate inputs
+      if (chatId.isEmpty || senderId.isEmpty) {
+        throw SendMessageException('Chat ID and sender ID are required');
+      }
 
-      final memberIds =
-          membersSnapshot.docs.map((doc) => doc['userId'] as String).toList();
+      if (messageText.isEmpty && imageUrl == null) {
+        throw SendMessageException('Message text or image URL is required');
+      }
 
-      // 2. SVE U JEDNOM TRANSACTION-U
+      // Get all members before transaction
+      final membersSnapshot = await _db
+          .collection('chats')
+          .doc(chatId)
+          .collection('members')
+          .get();
+
+      // Execute everything in a single transaction
       final messageId = await _db.runTransaction<String>((transaction) async {
-        // Kreiraj referencu za poruku
-        final messageRef =
-            _db.collection('chats').doc(chatId).collection('messages').doc();
+        // Create message reference
+        final messageRef = _db
+            .collection('chats')
+            .doc(chatId)
+            .collection('messages')
+            .doc();
 
         final timestamp = Timestamp.now();
         final readByMap = {senderId: timestamp};
 
-        // a) Dodaj poruku
+        // Add message
         transaction.set(messageRef, {
           'senderId': senderId,
           'message': messageText,
@@ -232,7 +241,7 @@ class ChatService {
           'readBy': readByMap,
         });
 
-        // b) Ažuriraj chat dokument
+        // Update chat document
         final chatRef = _db.collection('chats').doc(chatId);
         transaction.update(chatRef, {
           'lastMessage': {
@@ -244,7 +253,7 @@ class ChatService {
           'lastMessageTimestamp': timestamp,
         });
 
-        // c) Ažuriraj SVE member dokumente
+        // Update all member documents
         for (var memberDoc in membersSnapshot.docs) {
           final userId = memberDoc['userId'] as String;
           final isSender = userId == senderId;
@@ -262,39 +271,78 @@ class ChatService {
         return messageRef.id;
       });
 
-      print('Message sent successfully: $messageId');
+      debugPrint('✅ Message sent successfully: $messageId');
       return messageId;
     } on FirebaseException catch (e) {
-      print('Firebase error sending message: ${e.code} - ${e.message}');
-      return "";
-    } catch (e) {
-      print('Unexpected error sending message: $e');
-      return "";
+      await ErrorLogger.logError(
+        e,
+        StackTrace.current,
+        reason: 'Failed to send text message - Firestore error',
+        screen: 'ChatService.sendMessageToChat',
+        additionalData: {
+          'chat_id': chatId,
+          'sender_id': senderId,
+          'error_code': e.code,
+        },
+      );
+      throw SendMessageException('Greška pri slanju poruke: ${e.message}');
+    } catch (e, stackTrace) {
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Failed to send text message - unexpected error',
+        screen: 'ChatService.sendMessageToChat',
+        additionalData: {
+          'chat_id': chatId,
+          'sender_id': senderId,
+        },
+      );
+      throw SendMessageException('Neočekivana greška pri slanju poruke');
     }
   }
 
+  /// Sends an image message to a chat
+  /// Creates placeholder message immediately, then uploads image in background
   Future<String> sendImageToChat({
     required String chatId,
     required String senderId,
     required File imageFile,
   }) async {
     try {
-      print('📤 Sending image message...');
+      debugPrint('📤 Sending image message to chat: $chatId');
 
-      // 1. Dohvati chat podatke
+      // Validate inputs
+      if (chatId.isEmpty || senderId.isEmpty) {
+        throw SendMessageException('Chat ID and sender ID are required');
+      }
+
+      if (!imageFile.existsSync()) {
+        throw SendMessageException('Image file does not exist');
+      }
+
+      // Get chat data
       final chatDoc = await _db.collection('chats').doc(chatId).get();
-      if (!chatDoc.exists) throw Exception('Chat ne postoji');
+      
+      if (!chatDoc.exists) {
+        throw SendMessageException('Chat not found');
+      }
 
       final chatData = chatDoc.data()!;
       final allMemberIds = List<String>.from(chatData['memberIds'] ?? []);
 
-      // 2. Dohvati members
-      final membersSnapshot =
-          await _db.collection('chats').doc(chatId).collection('members').get();
+      // Get members
+      final membersSnapshot = await _db
+          .collection('chats')
+          .doc(chatId)
+          .collection('members')
+          .get();
 
-      // 3. ODMAH kreiraj poruku sa placeholder-om
-      final messageRef =
-          _db.collection('chats').doc(chatId).collection('messages').doc();
+      // Create placeholder message immediately
+      final messageRef = _db
+          .collection('chats')
+          .doc(chatId)
+          .collection('messages')
+          .doc();
 
       final timestamp = Timestamp.now();
       final readByMap = {senderId: timestamp};
@@ -308,7 +356,7 @@ class ChatService {
           'thumbUrl': null,
           'imagePath': null,
           'thumbPath': null,
-          'localImagePath': imageFile.path, // 🔥 Local path za prikaz
+          'localImagePath': imageFile.path,
           'timestamp': timestamp,
           'readBy': readByMap,
           'memberIds': allMemberIds,
@@ -316,7 +364,7 @@ class ChatService {
           'uploadProgress': 0.0,
         });
 
-        // Ažuriraj chat
+        // Update chat
         final chatRef = _db.collection('chats').doc(chatId);
         transaction.update(chatRef, {
           'lastMessage': {
@@ -328,7 +376,7 @@ class ChatService {
           'lastMessageTimestamp': timestamp,
         });
 
-        // Ažuriraj members
+        // Update members
         for (var memberDoc in membersSnapshot.docs) {
           final userId = memberDoc['userId'] as String;
           final isSender = userId == senderId;
@@ -345,9 +393,9 @@ class ChatService {
         }
       });
 
-      print('✅ Placeholder message created: ${messageRef.id}');
+      debugPrint('✅ Placeholder message created: ${messageRef.id}');
 
-      // 4. Upload SAMO THUMBNAIL prvo (brzo!)
+      // Upload thumbnail first (fast), then full image in background
       _uploadThumbnailFirst(
         messageRef: messageRef,
         chatId: chatId,
@@ -357,13 +405,37 @@ class ChatService {
       );
 
       return messageRef.id;
-    } catch (e) {
-      print('❌ Error creating message: $e');
-      return "";
+    } on SendMessageException {
+      rethrow;
+    } on FirebaseException catch (e) {
+      await ErrorLogger.logError(
+        e,
+        StackTrace.current,
+        reason: 'Failed to send image message - Firestore error',
+        screen: 'ChatService.sendImageToChat',
+        additionalData: {
+          'chat_id': chatId,
+          'sender_id': senderId,
+          'error_code': e.code,
+        },
+      );
+      throw SendMessageException('Greška pri slanju slike: ${e.message}');
+    } catch (e, stackTrace) {
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Failed to send image message - unexpected error',
+        screen: 'ChatService.sendImageToChat',
+        additionalData: {
+          'chat_id': chatId,
+          'sender_id': senderId,
+        },
+      );
+      throw SendMessageException('Neočekivana greška pri slanju slike');
     }
   }
 
-// 🚀 NOVA strategija - upload thumb prvo, pa full kasnije
+  /// Uploads thumbnail first for quick preview, then full image in background
   Future<void> _uploadThumbnailFirst({
     required DocumentReference messageRef,
     required String chatId,
@@ -376,8 +448,8 @@ class ChatService {
       final thumbName = 'thumb_$timestamp.jpg';
       final fullName = 'full_$timestamp.jpg';
 
-      // 1. Kompresuj SAMO thumbnail (brzo - <1 sekunda)
-      print('🔄 Compressing thumbnail...');
+      // Compress thumbnail (fast - <1 second)
+      debugPrint('🔄 Compressing thumbnail...');
       final thumbBytes = await FlutterImageCompress.compressWithFile(
         imageFile.absolute.path,
         minWidth: 200,
@@ -385,12 +457,11 @@ class ChatService {
       );
 
       if (thumbBytes == null) {
-        await messageRef.update({'isUploading': false, 'uploadFailed': true});
-        return;
+        throw Exception('Failed to compress thumbnail');
       }
 
-      // 2. Upload SAMO thumbnail (brzo - 1-2 sekunde)
-      print('⬆️ Uploading thumbnail...');
+      // Upload thumbnail (fast - 1-2 seconds)
+      debugPrint('⬆️ Uploading thumbnail...');
       final storage = FirebaseStorage.instance;
       final thumbRef = storage.ref('chat_images/$thumbName');
 
@@ -402,7 +473,7 @@ class ChatService {
         ),
       );
 
-      // Track progress samo za thumbnail
+      // Track progress for thumbnail only
       thumbTask.snapshotEvents.listen((snapshot) {
         final progress = snapshot.bytesTransferred / snapshot.totalBytes;
         messageRef.update({'uploadProgress': progress * 0.5}); // 0-50%
@@ -411,23 +482,23 @@ class ChatService {
       await thumbTask;
       final thumbUrl = await thumbRef.getDownloadURL();
 
-      print('✅ Thumbnail uploaded! Updating message...');
+      debugPrint('✅ Thumbnail uploaded! Updating message...');
 
-      // 3. ODMAH ažuriraj poruku sa thumbnail-om (korisnik vidi sliku!)
+      // Update message with thumbnail immediately
       await _db.runTransaction((transaction) async {
         transaction.update(messageRef, {
           'thumbUrl': thumbUrl,
           'thumbPath': thumbRef.fullPath,
-          'uploadProgress': 0.5, // Thumbnail gotov
+          'uploadProgress': 0.5,
         });
 
-        // Ažuriraj chat
+        // Update chat
         final chatRef = _db.collection('chats').doc(chatId);
         transaction.update(chatRef, {
           'lastMessage.text': '📷 Slika',
         });
 
-        // Ažuriraj members
+        // Update members
         for (var memberDoc in membersSnapshot.docs) {
           transaction.update(memberDoc.reference, {
             'lastMessage.message': '📷 Slika',
@@ -435,16 +506,24 @@ class ChatService {
         }
       });
 
-      print('🎉 Thumbnail ready! Now uploading full image in background...');
+      debugPrint('🎉 Thumbnail ready! Now uploading full image in background...');
 
-      // 4. Upload FULL sliku u POZADINI (ne blokira UI)
+      // Upload full image in background
       _uploadFullImageInBackground(
         messageRef: messageRef,
         imageFile: imageFile,
         fullName: fullName,
       );
-    } catch (e) {
-      print('❌ Thumbnail upload error: $e');
+    } catch (e, stackTrace) {
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Thumbnail upload failed',
+        screen: 'ChatService._uploadThumbnailFirst',
+      );
+
+      debugPrint('❌ Thumbnail upload error: $e');
+      
       await messageRef.update({
         'isUploading': false,
         'uploadFailed': true,
@@ -452,14 +531,14 @@ class ChatService {
     }
   }
 
-// 🔄 Upload full slike u pozadini
+  /// Uploads full image in background (non-blocking)
   Future<void> _uploadFullImageInBackground({
     required DocumentReference messageRef,
     required File imageFile,
     required String fullName,
   }) async {
     try {
-      print('🔄 Compressing full image...');
+      debugPrint('🔄 Compressing full image...');
       final fullBytes = await FlutterImageCompress.compressWithFile(
         imageFile.absolute.path,
         minWidth: 800,
@@ -467,16 +546,16 @@ class ChatService {
       );
 
       if (fullBytes == null) {
-        print('⚠️ Full image compression failed, keeping thumbnail only');
+        debugPrint('⚠️ Full image compression failed, keeping thumbnail only');
         await messageRef.update({
           'isUploading': false,
           'uploadProgress': 1.0,
-          'localImagePath': FieldValue.delete(), // ✅ Dodaj ovo
+          'localImagePath': FieldValue.delete(),
         });
         return;
       }
 
-      print('⬆️ Uploading full image...');
+      debugPrint('⬆️ Uploading full image...');
       final storage = FirebaseStorage.instance;
       final fullRef = storage.ref('chat_images/$fullName');
 
@@ -488,18 +567,12 @@ class ChatService {
         ),
       );
 
-      // ❌ UKLONI progress tracking za full sliku - pravi previše update-a
-      // thumbTask.snapshotEvents.listen((snapshot) {
-      //   final progress = 0.5 + (snapshot.bytesTransferred / snapshot.totalBytes) * 0.5;
-      //   messageRef.update({'uploadProgress': progress});
-      // });
-
       await fullTask;
       final fullUrl = await fullRef.getDownloadURL();
 
-      print('✅ Full image uploaded!');
+      debugPrint('✅ Full image uploaded!');
 
-      // ✅ JEDAN update sa svim podacima
+      // Update message with full image URL
       await messageRef.update({
         'imageUrl': fullUrl,
         'imagePath': fullRef.fullPath,
@@ -508,21 +581,41 @@ class ChatService {
         'localImagePath': FieldValue.delete(),
       });
 
-      print('🎉 Full image complete!');
-    } catch (e) {
-      print('⚠️ Full image upload error (thumbnail still works): $e');
+      debugPrint('🎉 Full image complete!');
+    } catch (e, stackTrace) {
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Full image upload failed (thumbnail still works)',
+        screen: 'ChatService._uploadFullImageInBackground',
+      );
+
+      debugPrint('⚠️ Full image upload error (thumbnail still works): $e');
+      
       await messageRef.update({
         'isUploading': false,
         'uploadProgress': 1.0,
-        'localImagePath': FieldValue.delete(), // ✅ Dodaj ovo
+        'localImagePath': FieldValue.delete(),
       });
     }
   }
 
+  /// Marks all unread messages in a chat as read for a specific user
+  /// Updates both individual messages and last message read status
   Future<void> markMessagesAsRead(String chatId, String userId) async {
     try {
+      // Validate inputs
+      if (chatId.isEmpty || userId.isEmpty) {
+        await ErrorLogger.logMessage(
+          'markMessagesAsRead called with empty chatId or userId',
+        );
+        return;
+      }
+
+      // Mark last message as read in chat document
       await markLastMessageAsRead(chatId, userId);
 
+      // Get all unread messages (messages not sent by this user)
       final messages = await _db
           .collection('chats')
           .doc(chatId)
@@ -535,12 +628,15 @@ class ChatService {
         return;
       }
 
+      // Batch update messages
       final batch = _db.batch();
       int updateCount = 0;
 
       for (var doc in messages.docs) {
-        final readBy = doc.data()['readBy'] as Map<String, dynamic>? ?? {};
+        final data = doc.data();
+        final readBy = data['readBy'] as Map<String, dynamic>? ?? {};
 
+        // Only update if user hasn't read this message yet
         if (!readBy.containsKey(userId)) {
           batch.update(doc.reference, {
             'readBy.$userId': FieldValue.serverTimestamp(),
@@ -550,113 +646,117 @@ class ChatService {
         }
       }
 
+      // Commit batch if there are updates
       if (updateCount > 0) {
         await batch.commit();
-        debugPrint('Marked $updateCount messages as read');
+        debugPrint('✅ Marked $updateCount messages as read in chat $chatId');
+      } else {
+        debugPrint('No messages to mark as read in chat $chatId');
       }
     } on FirebaseException catch (e) {
-    } catch (e) {}
+      await ErrorLogger.logError(
+        e,
+        StackTrace.current,
+        reason: 'Failed to mark messages as read - Firestore error',
+        screen: 'ChatService.markMessagesAsRead',
+        additionalData: {
+          'chat_id': chatId,
+          'user_id': userId,
+          'error_code': e.code,
+        },
+      );
+      // Don't throw - this is non-critical, chat can continue
+    } catch (e, stackTrace) {
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Failed to mark messages as read - unexpected error',
+        screen: 'ChatService.markMessagesAsRead',
+        additionalData: {
+          'chat_id': chatId,
+          'user_id': userId,
+        },
+      );
+      // Don't throw - this is non-critical
+    }
   }
 
+  /// Marks the last message in a chat as read for a specific user
+  /// Updates the readBy field in the chat document's lastMessage
   Future<void> markLastMessageAsRead(String chatId, String userId) async {
     try {
+      // Validate inputs
+      if (chatId.isEmpty || userId.isEmpty) {
+        await ErrorLogger.logMessage(
+          'markLastMessageAsRead called with empty chatId or userId',
+        );
+        return;
+      }
+
+      // Get chat document
       final chatRef = _db.collection('chats').doc(chatId);
       final chatDoc = await chatRef.get();
 
+      // Check if chat exists
       if (!chatDoc.exists) {
-        throw Exception('Chat ne postoji');
+        await ErrorLogger.logMessage('Chat document not found: $chatId');
+        return;
       }
 
-      final chatData = chatDoc.data()!;
+      // Get chat data
+      final chatData = chatDoc.data();
+      if (chatData == null) {
+        await ErrorLogger.logMessage('Chat data is null for chat: $chatId');
+        return;
+      }
+
+      // Get last message
       final lastMessage = chatData['lastMessage'] as Map<String, dynamic>?;
 
       if (lastMessage == null) {
-        print('No lastMessage to mark as read');
+        debugPrint('No lastMessage to mark as read in chat $chatId');
         return;
       }
 
+      // Check if user already read the message
       final readBy = lastMessage['readBy'] as Map<String, dynamic>? ?? {};
 
-      // Ako user već pročitao
       if (readBy.containsKey(userId)) {
-        print('User already read lastMessage');
+        debugPrint('User $userId already read lastMessage in chat $chatId');
         return;
       }
 
-      // Ažuriraj samo lastMessage.readBy
+      // Update lastMessage.readBy
       await chatRef.update({
         'lastMessage.readBy.$userId': FieldValue.serverTimestamp(),
       });
 
-      print('✅ Marked lastMessage as read');
+      debugPrint('✅ Marked lastMessage as read for user $userId in chat $chatId');
     } on FirebaseException catch (e) {
-      print('Firebase error: ${e.code} - ${e.message}');
-    } catch (e) {
-      print('Error: $e');
-    }
-  }
-
-// 4. POZADINSKI UPLOAD SA PROGRESS TRACKING-OM
-  Future<void> _uploadImageInBackground({
-    required DocumentReference messageRef,
-    required String chatId,
-    required String senderId,
-    required File imageFile,
-    required QuerySnapshot membersSnapshot,
-  }) async {
-    try {
-      // Upload sa progress tracking-om
-      final uploadResult = await uploadImageWithProgress(
-        imageFile,
-        'chat_images',
-        onProgress: (progress) {
-          // Opciono - ažuriraj progress u real-time
-          messageRef.update({'uploadProgress': progress});
+      await ErrorLogger.logError(
+        e,
+        StackTrace.current,
+        reason: 'Failed to mark last message as read - Firestore error',
+        screen: 'ChatService.markLastMessageAsRead',
+        additionalData: {
+          'chat_id': chatId,
+          'user_id': userId,
+          'error_code': e.code,
         },
       );
-
-      if (uploadResult == null) {
-        // Upload failed - označi poruku kao failed
-        await messageRef.update({
-          'isUploading': false,
-          'uploadFailed': true,
-        });
-        return;
-      }
-
-      // 5. AŽURIRAJ PORUKU SA PRAVIM URL-OVIMA
-      await _db.runTransaction((transaction) async {
-        transaction.update(messageRef, {
-          'imageUrl': uploadResult['fullUrl'],
-          'thumbUrl': uploadResult['thumbUrl'],
-          'imagePath': uploadResult['fullPath'],
-          'thumbPath': uploadResult['thumbPath'],
-          'isUploading': false,
-          'uploadProgress': 1.0,
-        });
-
-        // Ažuriraj chat
-        final chatRef = _db.collection('chats').doc(chatId);
-        transaction.update(chatRef, {
-          'lastMessage.text': '📷 Slika',
-        });
-
-        // Ažuriraj members
-        for (var memberDoc in membersSnapshot.docs) {
-          transaction.update(memberDoc.reference, {
-            'lastMessage.message': '📷 Slika',
-          });
-        }
-      });
-
-      print('Image uploaded successfully!');
-    } catch (e) {
-      print('Background upload failed: $e');
-      // Označi poruku kao failed
-      await messageRef.update({
-        'isUploading': false,
-        'uploadFailed': true,
-      });
+      // Don't throw - this is non-critical
+    } catch (e, stackTrace) {
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Failed to mark last message as read - unexpected error',
+        screen: 'ChatService.markLastMessageAsRead',
+        additionalData: {
+          'chat_id': chatId,
+          'user_id': userId,
+        },
+      );
+      // Don't throw - this is non-critical
     }
   }
 }

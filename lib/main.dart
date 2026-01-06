@@ -1,11 +1,8 @@
 import 'package:fruit_care_pro/firebase_options.dart';
-import 'package:fruit_care_pro/screens/admin_private_chat_screen.dart';
 import 'package:fruit_care_pro/screens/change_password_screen.dart';
 import 'package:fruit_care_pro/screens/change_user_data_screen.dart';
 import 'package:fruit_care_pro/screens/message_info.dart';
-import 'package:fruit_care_pro/screens/user_private_chat_screen.dart';
 import 'package:fruit_care_pro/screens/group_chat_screen.dart';
-
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +10,8 @@ import 'package:fruit_care_pro/screens/login_screen.dart';
 import 'package:fruit_care_pro/screens/admin_main_screen.dart';
 import 'package:fruit_care_pro/screens/user_main_screen.dart';
 import 'package:fruit_care_pro/models/user.dart';
+import 'package:fruit_care_pro/services/chat_service.dart';
+import 'package:fruit_care_pro/services/user_service.dart';
 import 'package:provider/provider.dart';
 import 'package:fruit_care_pro/user_notifier.dart';
 
@@ -24,10 +23,19 @@ void main() async {
   // Omogući Crashlytics slanje podataka
   await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(true);
 
-  runApp(ChangeNotifierProvider(
-      create: (_) => UserNotifier(),  // instanca UserNotifier-a
-      child: MyApp(),                 // root widget aplikacije
-    ),);
+  runApp(MultiProvider(
+    providers: [
+      // User state
+      ChangeNotifierProvider(create: (_) => UserNotifier()),
+
+      // Services (singletons)
+      Provider(create: (_) => UserService()),
+
+      Provider(create: (_) => ChatService()),
+
+    ],
+    child: const MyApp(),
+  ));
 }
 
 class MyApp extends StatelessWidget {
@@ -42,44 +50,29 @@ class MyApp extends StatelessWidget {
         '/login': (context) => LoginScreen(),
         '/admin': (context) => AdminMainScreen(),
         '/user': (context) => UserMainScreen(),
-        '/change-password': (context) => ChangePasswordScreen(appUser: ModalRoute.of(context)?.settings.arguments as AppUser?),
-        '/admin-private-chat': (context) {
-            final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+        '/change-password': (context) => ChangePasswordScreen(),
+        '/group-chat': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments
+              as Map<String, dynamic>?;
 
-            return AdminPrivateChatScreen(
-              chatId: args?['chatId'],
-              userId: args?['userId'],
-            );
-          },
-          '/person-private-chat': (context) {
-            final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-
-            return UserPrivateChatScreen(
-              chatId: args?['chatId'],
-              userId: args?['userId'],
-            );
-          },
-          '/group-chat': (context) {
-            final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-
-            return GroupChatScreen(
-              chatId: args?['chatId'],
-              fruitTypeId: args?['fruitTypeId'],
-              fruitTypeName: args?['fruitTypeName'],
-            );
-          },
-          '/message-info-screen': (context) {
-            final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-
-            return MessageDetailsScreen(
-              chatId: args?['chatId'],
-              messageId: args?['messageId'],
-            );
-          },
-          '/change-user-data': (context) => ChangeUserDataScreen(appUser: ModalRoute.of(context)?.settings.arguments as AppUser?),
+          return GroupChatScreen(
+            chatId: args?['chatId'],
+            fruitTypeId: args?['fruitTypeId'],
+            fruitTypeName: args?['fruitTypeName'],
+          );
         },
-        
-        
+        '/message-info-screen': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments
+              as Map<String, dynamic>?;
+
+          return MessageDetailsScreen(
+            chatId: args?['chatId'],
+            messageId: args?['messageId'],
+          );
+        },
+        '/change-user-data': (context) => ChangeUserDataScreen(
+            appUser: ModalRoute.of(context)?.settings.arguments as AppUser?),
+      },
     );
   }
 }
