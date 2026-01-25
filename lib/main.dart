@@ -10,7 +10,9 @@ import 'package:fruit_care_pro/screens/login_screen.dart';
 import 'package:fruit_care_pro/screens/admin_main_screen.dart';
 import 'package:fruit_care_pro/screens/user_main_screen.dart';
 import 'package:fruit_care_pro/models/user.dart';
+import 'package:fruit_care_pro/services/advertisement_service.dart';
 import 'package:fruit_care_pro/services/chat_service.dart';
+import 'package:fruit_care_pro/services/fruit_types_service.dart';
 import 'package:fruit_care_pro/services/user_service.dart';
 import 'package:provider/provider.dart';
 import 'package:fruit_care_pro/user_notifier.dart';
@@ -33,6 +35,9 @@ void main() async {
 
       Provider(create: (_) => ChatService()),
 
+      Provider(create: (_) => FruitTypesService()),
+
+      Provider(create: (_) => AdvertisementService()),
     ],
     child: const MyApp(),
   ));

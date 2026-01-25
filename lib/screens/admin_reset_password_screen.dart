@@ -1,7 +1,6 @@
 import 'package:fruit_care_pro/services/admin_service_http.dart';
 import 'package:fruit_care_pro/shared_ui_components.dart';
 import 'package:flutter/material.dart';
-import 'package:fruit_care_pro/services/admin_service.dart';
 import 'package:fruit_care_pro/models/user.dart';
 
 class AdminResetPasswordScreen extends StatefulWidget {

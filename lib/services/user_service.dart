@@ -4,7 +4,6 @@ import 'package:fruit_care_pro/exceptions/get_all_users_exception.dart';
 import 'package:fruit_care_pro/exceptions/login_exception.dart';
 import 'package:fruit_care_pro/exceptions/password_change_exception.dart';
 import 'package:fruit_care_pro/exceptions/wrong_password_exception.dart';
-import 'package:fruit_care_pro/models/change_password_result.dart';
 import 'package:fruit_care_pro/models/create_user_result.dart';
 import 'package:fruit_care_pro/services/documents_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -12,7 +11,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fruit_care_pro/models/create_user.dart';
 import 'package:fruit_care_pro/models/user.dart';
 import 'package:fruit_care_pro/models/user_fruit_type.dart';
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:fruit_care_pro/utils/error_logger.dart';
 
 class UserService {

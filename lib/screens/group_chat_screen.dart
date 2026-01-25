@@ -1,16 +1,19 @@
 import 'dart:io';
-import 'package:fruit_care_pro/current_user_service.dart';
-import 'package:fruit_care_pro/models/user.dart';
-import 'package:fruit_care_pro/screens/full_screen_image_viewer.dart';
-import 'package:fruit_care_pro/screens/message_info.dart';
-import 'package:fruit_care_pro/widgets/date_separator.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:fruit_care_pro/services/chat_service.dart';
-import 'package:fruit_care_pro/shared_ui_components.dart';
-import 'package:fruit_care_pro/services/user_service.dart';
-import 'dart:async';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
+
+import 'package:fruit_care_pro/models/user.dart';
+import 'package:fruit_care_pro/services/chat_service.dart';
+import 'package:fruit_care_pro/services/user_service.dart';
+import 'package:fruit_care_pro/current_user_service.dart';
+import 'package:fruit_care_pro/shared_ui_components.dart';
+import 'package:fruit_care_pro/utils/error_logger.dart';
+import 'package:fruit_care_pro/widgets/date_separator.dart';
+import 'package:fruit_care_pro/screens/message_info.dart';
+import 'package:fruit_care_pro/screens/full_screen_image_viewer.dart';
 
 class GroupChatScreen extends StatefulWidget {
   final String? chatId;
@@ -30,8 +33,8 @@ class GroupChatScreen extends StatefulWidget {
 
 class _GroupChatScreenState extends State<GroupChatScreen> {
   // Services
-  final UserService _userService = UserService();
-  final ChatService _chatService = ChatService();
+  late final UserService _userService;
+  late final ChatService _chatService;
   final ImagePicker _imagePicker = ImagePicker();
 
   // Controllers
@@ -41,13 +44,14 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       StreamController<List<DocumentSnapshot>>.broadcast();
 
   // State variables
-  late final String _myId; // ID trenutnog korisnika
+  late final String _myId;
   String _adminId = '';
   String _chatId = '';
   String _fruitTypeId = '';
   String _fruitTypeName = '';
   bool _isLoading = true;
   bool _hasMoreData = true;
+  String? _errorMessage;
 
   // Pagination
   DocumentSnapshot? _lastDocument;
@@ -55,71 +59,135 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   final List<StreamSubscription> _subscriptions = [];
   Timestamp? _userLastMessageTimestamp;
 
+  // User state
   AppUser? get _currentUser => CurrentUserService.instance.currentUser;
   bool get _isAdmin => _currentUser?.isAdmin ?? false;
 
   @override
   void initState() {
     super.initState();
-    _myId = CurrentUserService.instance.currentUser!.id;
-    _initialize();
-    _setupScrollListener();
+    _initializeScreen();
   }
 
   @override
   void dispose() {
+    // Cancel all subscriptions
     for (var subscription in _subscriptions) {
       subscription.cancel();
     }
     _subscriptions.clear();
+    
+    // Close stream controller
     _chatStreamController.close();
+    
+    // Dispose controllers
     _messageController.dispose();
     _scrollController.dispose();
+    
     super.dispose();
   }
 
   // ==================== INITIALIZATION ====================
 
-  Future<void> _initialize() async {
-    await _extractRouteParameters();
-    await _loadAdminId();
-    await _markMessagesAsRead();
-    _finalizeInitialization();
-  }
+  /// Initialize screen with all necessary data
+  Future<void> _initializeScreen() async {
+    try {
+      // Get current user
+      final currentUser = CurrentUserService.instance.currentUser;
+      if (currentUser == null) {
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/login');
+        }
+        return;
+      }
+      _myId = currentUser.id;
 
-  Future<void> _extractRouteParameters() async {
-    if (widget.fruitTypeId != null) {
-      _fruitTypeId = widget.fruitTypeId!;
-    }
-    if (widget.fruitTypeName != null) {
-      _fruitTypeName = widget.fruitTypeName!;
-    }
-    if (widget.chatId != null) {
-      _chatId = widget.chatId!;
-    }
-  }
+      // Get services from Provider
+      _userService = context.read<UserService>();
+      _chatService = context.read<ChatService>();
 
-  Future<void> _loadAdminId() async {
-    final id = await _userService.getAdminId();
-    if (id != null && mounted) {
-      setState(() => _adminId = id);
-    }
-  }
+      // Extract route parameters
+      await _extractRouteParameters();
 
-  Future<void> _markMessagesAsRead() async {
-    if (_chatId.isNotEmpty && _myId.isNotEmpty) {
-      await _chatService.markMessagesAsRead(_chatId, _myId);
-    }
-  }
+      // Load admin ID
+      await _loadAdminId();
 
-  void _finalizeInitialization() {
-    if (_adminId.isNotEmpty && _chatId.isNotEmpty) {
+      // Mark messages as read
+      await _markMessagesAsRead();
+
+      // Setup scroll listener for pagination
+      _setupScrollListener();
+
+      // Finalize initialization
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _isLoading = false;
+          _errorMessage = null;
+        });
+      }
+
+    } catch (e, stackTrace) {
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Failed to initialize GroupChatScreen',
+        screen: 'GroupChatScreen',
+        additionalData: {
+          'chat_id': _chatId,
+          'fruit_type_id': _fruitTypeId,
+        },
+      );
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Greška pri učitavanju chata';
+        });
       }
     }
   }
 
+  /// Extract route parameters from widget
+  Future<void> _extractRouteParameters() async {
+    _chatId = widget.chatId ?? '';
+    _fruitTypeId = widget.fruitTypeId ?? '';
+    _fruitTypeName = widget.fruitTypeName ?? '';
+
+    if (_chatId.isEmpty) {
+      throw Exception('Chat ID is required');
+    }
+  }
+
+  /// Load admin ID from user service
+  Future<void> _loadAdminId() async {
+    final adminId = await _userService.getAdminId();
+    
+    if (adminId == null || adminId.isEmpty) {
+      throw Exception('Admin ID not found');
+    }
+
+    _adminId = adminId;
+  }
+
+  /// Mark all messages as read for current user
+  Future<void> _markMessagesAsRead() async {
+    if (_chatId.isEmpty || _myId.isEmpty) return;
+
+    try {
+      await _chatService.markMessagesAsRead(_chatId, _myId);
+    } catch (e, stackTrace) {
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Failed to mark messages as read',
+        screen: 'GroupChatScreen',
+        additionalData: {'chat_id': _chatId},
+      );
+      // Non-critical error, continue
+    }
+  }
+
+  /// Setup scroll listener for pagination
   void _setupScrollListener() {
     _scrollController.addListener(() {
       if (_isAtScrollThreshold && !_scrollController.position.outOfRange) {
@@ -128,17 +196,20 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     });
   }
 
+  /// Check if scroll is at threshold for loading more messages
   bool get _isAtScrollThreshold {
     return _scrollController.offset >= _scrollController.position.maxScrollExtent;
   }
 
   // ==================== CHAT LOADING ====================
 
+  /// Stream of chat messages with pagination
   Stream<List<DocumentSnapshot>> _listenToChatsRealTime() {
     _loadMoreMessages();
     return _chatStreamController.stream;
   }
 
+  /// Load more messages (pagination)
   void _loadMoreMessages() {
     if (!_hasMoreData || _chatId.isEmpty) return;
 
@@ -147,12 +218,21 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
     final subscription = query.snapshots().listen(
       (snapshot) => _handleMessagesSnapshot(snapshot, currentRequestIndex),
-      onError: (error) => debugPrint('❌ Error loading messages: $error'),
+      onError: (error, stackTrace) {
+        ErrorLogger.logError(
+          error,
+          stackTrace,
+          reason: 'Error in messages stream',
+          screen: 'GroupChatScreen',
+          additionalData: {'chat_id': _chatId},
+        );
+      },
     );
 
     _subscriptions.add(subscription);
   }
 
+  /// Build Firestore query for messages
   Query<Map<String, dynamic>> _buildMessagesQuery() {
     Query<Map<String, dynamic>> query = FirebaseFirestore.instance
         .collection('chats')
@@ -168,9 +248,14 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     return query;
   }
 
-  void _handleMessagesSnapshot(QuerySnapshot snapshot, int currentRequestIndex) {
+  /// Handle snapshot from messages query
+  void _handleMessagesSnapshot(
+    QuerySnapshot snapshot,
+    int currentRequestIndex,
+  ) {
     if (!mounted) return;
 
+    // Empty snapshot - no more messages
     if (snapshot.docs.isEmpty) {
       if (!_chatStreamController.isClosed) {
         _chatStreamController.add([]);
@@ -179,37 +264,68 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       return;
     }
 
-    // 🔥 Track admin's last message timestamp
+    // Track admin's last message timestamp
     _updateAdminLastMessageTimestamp(snapshot.docs);
 
+    // Update paged results
     _updatePagedResults(snapshot.docs, currentRequestIndex);
+
+    // Emit all messages
     _emitAllMessages();
+
+    // Update pagination state
     _updatePaginationState(snapshot.docs, currentRequestIndex);
   }
 
+  /// Update admin's last message timestamp for read receipts
   void _updateAdminLastMessageTimestamp(List<DocumentSnapshot> docs) {
-    final adminMessages = docs
-        .where((doc) => doc['senderId'] == _adminId)
-        .toList()
-      ..sort((a, b) =>
-          (b['timestamp'] as Timestamp).compareTo(a['timestamp'] as Timestamp));
+    try {
+      final adminMessages = docs
+          .where((doc) {
+            final data = doc.data() as Map<String, dynamic>?;
+            return data?['senderId'] == _adminId;
+          })
+          .toList()
+        ..sort((a, b) {
+          final aData = a.data() as Map<String, dynamic>;
+          final bData = b.data() as Map<String, dynamic>;
+          return (bData['timestamp'] as Timestamp).compareTo(
+            aData['timestamp'] as Timestamp,
+          );
+        });
 
-    if (adminMessages.isNotEmpty) {
-      final latestTimestamp = adminMessages.first['timestamp'] as Timestamp;
-      if (_userLastMessageTimestamp == null ||
-          _userLastMessageTimestamp!.compareTo(latestTimestamp) < 0) {
-        _userLastMessageTimestamp = latestTimestamp;
+      if (adminMessages.isNotEmpty) {
+        final latestData = adminMessages.first.data() as Map<String, dynamic>;
+        final latestTimestamp = latestData['timestamp'] as Timestamp;
+        
+        if (_userLastMessageTimestamp == null ||
+            _userLastMessageTimestamp!.compareTo(latestTimestamp) < 0) {
+          _userLastMessageTimestamp = latestTimestamp;
+        }
       }
+    } catch (e, stackTrace) {
+      ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Failed to update admin last message timestamp',
+        screen: 'GroupChatScreen',
+      );
     }
   }
 
+  /// Emit all messages to stream
   void _emitAllMessages() {
     if (_chatStreamController.isClosed) return;
+    
     final allMessages = _allPagedResults.expand((page) => page).toList();
     _chatStreamController.add(allMessages);
   }
 
-  void _updatePagedResults(List<DocumentSnapshot> docs, int currentRequestIndex) {
+  /// Update paged results with new documents
+  void _updatePagedResults(
+    List<DocumentSnapshot> docs,
+    int currentRequestIndex,
+  ) {
     if (currentRequestIndex < _allPagedResults.length) {
       _allPagedResults[currentRequestIndex] = docs;
     } else {
@@ -217,7 +333,11 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     }
   }
 
-  void _updatePaginationState(List<DocumentSnapshot> docs, int currentRequestIndex) {
+  /// Update pagination state
+  void _updatePaginationState(
+    List<DocumentSnapshot> docs,
+    int currentRequestIndex,
+  ) {
     if (currentRequestIndex == _allPagedResults.length - 1) {
       _lastDocument = docs.last;
     }
@@ -226,51 +346,113 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   // ==================== MESSAGE SENDING ====================
 
+  /// Send text message
   Future<void> _sendTextMessage() async {
-    if (!_isAdmin) return; // Samo admin šalje poruke
+    if (!_isAdmin) {
+      _showAdminOnlyMessage();
+      return;
+    }
 
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
     _messageController.clear();
-    await _sendMessage(messageText: text);
-  }
 
-  Future<void> _sendImageMessage() async {
-    if (!_isAdmin) return; // Samo admin šalje poruke
-
-    final pickedFile = await _imagePicker.pickImage(source: ImageSource.gallery);
-
-    if (pickedFile != null) {
-      final imageFile = File(pickedFile.path);
-      await _chatService.sendMessage(
-        _chatId,
-        _adminId,
-        _adminId, // Za group chat, admin šalje sam sebi
-        '',
-        imageFile,
+    try {
+      await _sendMessage(messageText: text);
+    } catch (e, stackTrace) {
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Failed to send text message',
+        screen: 'GroupChatScreen',
       );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Greška pri slanju poruke'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
+  /// Send image message
+  Future<void> _sendImageMessage() async {
+    if (!_isAdmin) {
+      _showAdminOnlyMessage();
+      return;
+    }
+
+    try {
+      final pickedFile = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+      );
+
+      if (pickedFile == null) return;
+
+      final imageFile = File(pickedFile.path);
+      
+      await _chatService.sendMessage(
+        _chatId,
+        _adminId,
+        _adminId, // For group chat, admin sends to self
+        '',
+        imageFile,
+      );
+
+    } catch (e, stackTrace) {
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Failed to send image message',
+        screen: 'GroupChatScreen',
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Greška pri slanju slike'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Send message to chat
   Future<void> _sendMessage({String? messageText, String? imageUrl}) async {
     if (_chatId.isEmpty || _adminId.isEmpty) return;
 
     final message = messageText ?? imageUrl ?? '';
+    
     await _chatService.sendMessage(
       _chatId,
       _adminId,
-      _adminId, // Za group chat
+      _adminId, // For group chat
       message,
       null,
     );
   }
 
+  /// Show message that only admin can send messages
+  void _showAdminOnlyMessage() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Samo administrator može slati poruke'),
+        backgroundColor: Colors.orange,
+      ),
+    );
+  }
+
   // ==================== NAVIGATION ====================
 
-
-
+  /// Navigate to message info screen (admin only)
   void _navigateToMessageInfo(String messageId) {
+    if (!_isAdmin) return;
+
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -282,7 +464,12 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     );
   }
 
-  void _navigateToImageViewer(String? imageUrl, String? localPath, String? messageId) {
+  /// Navigate to full screen image viewer
+  void _navigateToImageViewer(
+    String? imageUrl,
+    String? localPath,
+    String? messageId,
+  ) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -299,11 +486,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Loading state
     if (_isLoading) {
       return _buildLoadingScreen();
     }
 
-    if (_chatId.isEmpty) {
+    // Error state
+    if (_errorMessage != null || _chatId.isEmpty) {
       return _buildErrorScreen();
     }
 
@@ -313,12 +502,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         children: [
           Expanded(child: _buildMessagesList()),
           if (_isAdmin) _buildMessageInput(),
-          if (!_isAdmin) const SizedBox(height: 60), // Spacing za non-admin
+          if (!_isAdmin) const SizedBox(height: 60),
         ],
       ),
     );
   }
 
+  /// Build loading screen
   Widget _buildLoadingScreen() {
     return Scaffold(
       appBar: AppBar(title: const Text('')),
@@ -326,13 +516,29 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     );
   }
 
+  /// Build error screen
   Widget _buildErrorScreen() {
     return Scaffold(
-      appBar: AppBar(title: const Text('Portal BB')),
-      body: const Center(child: Text('Chat ID nije dostupan.')),
+      appBar: AppBar(title: const Text('Greška')),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+            const SizedBox(height: 16),
+            Text(_errorMessage ?? 'Chat ID nije dostupan.'),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Nazad'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
+  /// Build app bar
   PreferredSizeWidget _buildAppBar() {
     return PreferredSize(
       preferredSize: const Size.fromHeight(kToolbarHeight + 3),
@@ -342,13 +548,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           children: [
             AppBar(
               elevation: 0,
+              centerTitle: true,
               backgroundColor: Colors.transparent,
-              title:  Text(
-                      _fruitTypeName,
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                  ),
-            
+              title: Text(
+                _fruitTypeName,
+                style: const TextStyle(color: Colors.white),
+              ),
+            ),
             Container(height: 3, color: Colors.brown[500]),
           ],
         ),
@@ -356,14 +562,17 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     );
   }
 
+  /// Build messages list
   Widget _buildMessagesList() {
     return StreamBuilder<List<DocumentSnapshot>>(
       stream: _listenToChatsRealTime(),
       builder: (context, snapshot) {
+        // Loading state
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
 
+        // Empty state
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return const Center(child: Text('Započnite razgovor.'));
         }
@@ -386,7 +595,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                     timestamp: messageData['timestamp'] as Timestamp?,
                   ),
                 GestureDetector(
-                  onTap: () => _isAdmin ? _navigateToMessageInfo(messageDoc.id) : {},
+                  onTap: () => _isAdmin 
+                      ? _navigateToMessageInfo(messageDoc.id) 
+                      : null,
                   child: _GroupChatBubble(
                     messageData: messageData,
                     isCurrentUser: messageData['senderId'] == _myId,
@@ -407,6 +618,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     );
   }
 
+  /// Check if should show date separator
   bool _shouldShowDateSeparator(List<DocumentSnapshot> messages, int index) {
     if (index == messages.length - 1) return true;
 
@@ -424,12 +636,14 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     return !_isSameDay(currentDate, nextDate);
   }
 
+  /// Check if two dates are on same day
   bool _isSameDay(DateTime date1, DateTime date2) {
     return date1.year == date2.year &&
         date1.month == date2.month &&
         date1.day == date2.day;
   }
 
+  /// Build message input field (admin only)
   Widget _buildMessageInput() {
     return SafeArea(
       child: Container(
@@ -481,8 +695,8 @@ class _GroupChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasImage = messageData['thumbUrl'] != null || 
-                      messageData['localImagePath'] != null;
+    final hasImage = messageData['thumbUrl'] != null ||
+        messageData['localImagePath'] != null;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 10.0),
@@ -499,9 +713,7 @@ class _GroupChatBubble extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: isCurrentUser 
-                      ? Colors.green[800] 
-                      : Colors.brown[500],
+                  color: isCurrentUser ? Colors.green[800] : Colors.brown[500],
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
@@ -509,9 +721,9 @@ class _GroupChatBubble extends StatelessWidget {
                       ? CrossAxisAlignment.end
                       : CrossAxisAlignment.start,
                   children: [
-                    // 🔥 Image (reuse logic from ChatBubble)
+                    // Image
                     if (hasImage) _buildImage(),
-                    
+
                     // Text message
                     if (_hasText) ...[
                       if (hasImage) const SizedBox(height: 8),
@@ -520,7 +732,7 @@ class _GroupChatBubble extends StatelessWidget {
                         style: const TextStyle(color: Colors.white),
                       ),
                     ],
-                    
+
                     const SizedBox(height: 4),
                     _buildTimestampWithStatus(),
                   ],
@@ -559,7 +771,7 @@ class _GroupChatBubble extends StatelessWidget {
 
   Widget _buildUploadingImage() {
     final localPath = messageData['localImagePath'] as String?;
-    
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: SizedBox(
@@ -676,7 +888,7 @@ class _GroupChatBubble extends StatelessWidget {
             fontSize: 11,
           ),
         ),
-        // 🔥 Read status - samo ako je admin poslao poruku posle user-ovog pristupa
+        // Read status - only if admin sent message after user's last access
         if (isAdmin && _shouldShowReadIcon(timestamp)) ...[
           const SizedBox(width: 4),
           _buildReadStatusIcon(),
