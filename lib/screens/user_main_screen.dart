@@ -1,3 +1,4 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
@@ -116,6 +117,36 @@ class _UserMainScreenState extends State<UserMainScreen> {
             Container(
               height: 3,
               color: Colors.brown[500],
+              child:    FloatingActionButton(
+  onPressed: () async {
+    final token = await FirebaseMessaging.instance.getToken();
+    final permission = await FirebaseMessaging.instance.getNotificationSettings();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Push Notification Info'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Permission: ${permission.authorizationStatus}'),
+            SizedBox(height: 10),
+            Text('Token:', style: TextStyle(fontWeight: FontWeight.bold)),
+            SelectableText(token ?? 'NO TOKEN'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Close'),
+          ),
+        ],
+      ),
+    );
+  },
+  child: Icon(Icons.notifications),
+)
             ),
           ],
         ),

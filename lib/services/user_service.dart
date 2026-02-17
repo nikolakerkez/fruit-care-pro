@@ -11,6 +11,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fruit_care_pro/models/create_user.dart';
 import 'package:fruit_care_pro/models/user.dart';
 import 'package:fruit_care_pro/models/user_fruit_type.dart';
+import 'package:fruit_care_pro/services/notification_service.dart';
 import 'package:fruit_care_pro/utils/error_logger.dart';
 
 class UserService {
@@ -56,6 +57,8 @@ class UserService {
         throw LoginException('User data is corrupted');
       }
 
+      await NotificationService.saveTokenAfterLogin();
+      
       return AppUser.fromFirestore(userData, user.uid, []);
     } on FirebaseAuthException catch (e) {
       // Handle specific Firebase Auth errors
@@ -502,11 +505,11 @@ Future<String?> getAdminId() async {
 
       // Prvo dohvati sve veze korisnika → van transakcije
       final existingSnapshot =
-          await userFruitRef.where('userId', isEqualTo: user!.id).get();
+          await userFruitRef.where('userId', isEqualTo: user.id).get();
 
       await _db.runTransaction((transaction) async {
         // User ref from the firestore
-        DocumentReference userRef = _db.collection('users').doc(user!.id);
+        DocumentReference userRef = _db.collection('users').doc(user.id);
 
         // Check if user already exists
         DocumentSnapshot userSnapshot = await transaction.get(userRef);
@@ -646,6 +649,9 @@ Future<String?> getAdminId() async {
 
   // Funkcija za logout
   Future<void> logout() async {
+
+    await NotificationService.clearToken();
+
     await _auth.signOut();
   }
 

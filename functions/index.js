@@ -1,16 +1,16 @@
-const functions = require("firebase-functions");
+const {onDocumentCreated} = require("firebase-functions/v2/firestore");
+const {onRequest, onCall, HttpsError} = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 
 admin.initializeApp();
 
-// 🔥 NOVA HTTP FUNKCIJA (onRequest)
-exports.adminResetPasswordHttp = functions.https.onRequest(async (req, res) => {
-  // CORS headers
+// Tvoje admin funkcije ostaju iste...
+exports.adminResetPasswordHttp = onRequest(async (req, res) => {
+  // ... tvoj postojeći kod ...
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-  // Handle preflight
   if (req.method === 'OPTIONS') {
     res.status(204).send('');
     return;
@@ -20,7 +20,6 @@ exports.adminResetPasswordHttp = functions.https.onRequest(async (req, res) => {
   console.log("📞 adminResetPasswordHttp called");
   
   try {
-    // 1. Check Authorization header
     const authHeader = req.headers.authorization;
     console.log("🔍 Auth header:", authHeader ? "EXISTS" : "MISSING");
     
@@ -29,17 +28,14 @@ exports.adminResetPasswordHttp = functions.https.onRequest(async (req, res) => {
       return res.status(401).json({error: "No token"});
     }
 
-    // 2. Extract token
     const idToken = authHeader.split('Bearer ')[1];
     console.log("🔍 Token length:", idToken.length);
 
-    // 3. Verify token
     const decodedToken = await admin.auth().verifyIdToken(idToken);
     console.log("✅ Token verified - UID:", decodedToken.uid);
 
     const adminUid = decodedToken.uid;
 
-    // 4. Check if admin
     const adminUser = await admin.firestore()
       .collection("users")
       .doc(adminUid)
@@ -60,7 +56,6 @@ exports.adminResetPasswordHttp = functions.https.onRequest(async (req, res) => {
 
     console.log("✅ User is admin");
 
-    // 5. Get parameters
     const {userId, newPassword} = req.body;
     console.log("🔍 Target userId:", userId);
     console.log("🔍 Password length:", newPassword?.length);
@@ -75,11 +70,9 @@ exports.adminResetPasswordHttp = functions.https.onRequest(async (req, res) => {
       return res.status(400).json({error: "Password must be 6+ chars"});
     }
 
-    // 6. Reset password
     await admin.auth().updateUser(userId, {password: newPassword});
     console.log("✅ Password updated in Auth");
 
-    // 7. Update Firestore
     await admin.firestore().collection("users").doc(userId).update({
       isPasswordChangeNeeded: true,
       passwordChangedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -101,23 +94,23 @@ exports.adminResetPasswordHttp = functions.https.onRequest(async (req, res) => {
   }
 });
 
-exports.adminResetPassword = functions.https.onCall(async (data, context) => {
-    // 🔥 DEBUG: Isprintaj sve što dobiješ
+exports.adminResetPassword = onCall(async (request) => {
+    const data = request.data;
+    const auth = request.auth;
+    
     console.log("📞 adminResetPassword called");
-    console.log("🔍 context.auth:", context.auth);
-    console.log("🔍 context.auth.uid:", context.auth?.uid);
+    console.log("🔍 auth:", auth);
     console.log("🔍 data:", data);
   
-    // Proveri da li je admin
-    if (!context.auth) {
+    if (!auth) {
       console.log("❌ context.auth is NULL - User not authenticated");
-      throw new functions.https.HttpsError(
+      throw new HttpsError(
         "unauthenticated",
         "Morate biti prijavljeni",
       );
     }
   
-    const adminUid = context.auth.uid;
+    const adminUid = auth.uid;
     console.log("✅ User authenticated:", adminUid);
   
     const adminUser = await admin.firestore()
@@ -128,7 +121,7 @@ exports.adminResetPassword = functions.https.onCall(async (data, context) => {
   
     if (!adminUser.exists || !adminUser.data().isAdmin) {
       console.log("❌ User is not admin");
-      throw new functions.https.HttpsError(
+      throw new HttpsError(
         "permission-denied",
         "Samo admin može resetovati lozinku",
       );
@@ -139,28 +132,26 @@ exports.adminResetPassword = functions.https.onCall(async (data, context) => {
     const {userId, newPassword} = data;
   
     if (!userId || !newPassword) {
-      throw new functions.https.HttpsError(
+      throw new HttpsError(
         "invalid-argument",
         "userId i newPassword su obavezni",
       );
     }
   
     if (newPassword.length < 6) {
-      throw new functions.https.HttpsError(
+      throw new HttpsError(
         "invalid-argument",
         "Lozinka mora imati minimum 6 karaktera",
       );
     }
   
     try {
-      // Reset password
       await admin.auth().updateUser(userId, {
         password: newPassword,
       });
   
       console.log("✅ Password updated in Auth");
   
-      // Označi da korisnik mora da promeni lozinku
       await admin.firestore().collection("users").doc(userId).update({
         isPasswordChangeNeeded: true,
         passwordChangedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -172,47 +163,173 @@ exports.adminResetPassword = functions.https.onCall(async (data, context) => {
       return {success: true, message: "Lozinka uspešno promenjena"};
     } catch (error) {
       console.error("❌ Error resetting password:", error);
-      throw new functions.https.HttpsError(
+      throw new HttpsError(
         "internal",
         "Greška pri resetovanju lozinke: " + error.message,
       );
     }
   });
 
-  // 🔥 SUPER DETALJNI TEST
-exports.testAuth = functions.https.onCall(async (data, context) => {
-  console.log("═══════════════════════════════════════");
-  console.log("📞 testAuth called");
-  console.log("🔍 context.auth:", context.auth);
-  console.log("🔍 context.auth exists:", !!context.auth);
-  console.log("🔍 context.auth type:", typeof context.auth);
-  
-  if (context.rawRequest && context.rawRequest.headers) {
-    console.log("🔍 Authorization header:", 
-      context.rawRequest.headers.authorization ? "EXISTS" : "MISSING");
+// 🔥 CHAT NOTIFICATION - v2 API bez Eventarc problema
+exports.sendChatNotification = onDocumentCreated(
+  {
+    document: "chats/{chatId}/messages/{messageId}",
+    region: "us-central1",
+  },
+  async (event) => {
+    const snapshot = event.data;
+    if (!snapshot) {
+      console.log("No data");
+      return;
+    }
     
-    if (context.rawRequest.headers.authorization) {
-      const auth = context.rawRequest.headers.authorization;
-      console.log("🔍 Auth header (first 100):", auth.substring(0, 100));
+    const message = snapshot.data();
+    const chatId = event.params.chatId;
+    const senderId = message.senderId;
+    
+    try {
+      console.log('📩 New message in chat:', chatId);
+      console.log('👤 Sender ID:', senderId);
+      
+      const chatDoc = await admin.firestore()
+        .collection('chats')
+        .doc(chatId)
+        .get();
+      
+      if (!chatDoc.exists) {
+        console.log('❌ Chat not found');
+        return;
+      }
+      
+      const chatData = chatDoc.data();
+      const memberIds = chatData.memberIds || [];
+      
+      // 🔍 DEBUG
+      console.log('👥 memberIds iz chata:', JSON.stringify(memberIds));
+      console.log('📊 Broj članova:', memberIds.length);
+      
+      const senderDoc = await admin.firestore()
+        .collection('users')
+        .doc(senderId)
+        .get();
+      
+      const senderName = senderDoc.data()?.name || 
+                         senderDoc.data()?.displayName || 
+                         'Neko';
+      
+      const recipientIds = memberIds.filter(id => id !== senderId);
+      
+      // 🔍 DEBUG
+      console.log('📬 recipientIds:', JSON.stringify(recipientIds));
+      
+      if (recipientIds.length === 0) {
+        console.log('⚠️ No recipients found');
+        return;
+      }
+      
+      const tokenPromises = recipientIds.map(async (recipientId) => {
+        console.log('🔍 Tražim token za:', recipientId);
+        
+        const userDoc = await admin.firestore()
+          .collection('users')
+          .doc(recipientId)
+          .get();
+        
+        // 🔍 DEBUG
+        console.log('📄 User postoji:', userDoc.exists);
+        console.log('📄 User data keys:', userDoc.exists ? Object.keys(userDoc.data()) : 'N/A');
+        
+        const token = userDoc.data()?.fcmToken;
+        
+        // 🔍 DEBUG
+        console.log('🔑 Token za', recipientId, ':', token ? `EXISTS (${token.substring(0, 20)}...)` : 'NULL ❌');
+        
+        return { recipientId, token };
+      });
+      
+      const tokenData = await Promise.all(tokenPromises);
+      const validTokens = tokenData.filter(t => t.token != null);
+      
+      console.log('✅ Valid tokens:', validTokens.length);
+      
+      if (validTokens.length === 0) {
+        console.log('⚠️ No valid FCM tokens');
+        return;
+      }
+      
+      let messageText = message.message || '';
+      if (message.imageUrl && !messageText) {
+        messageText = '📷 Slika';
+      }
+      
+      const notifications = validTokens.map(({ recipientId, token }) => {
+        return admin.messaging().send({
+          token: token,
+          notification: {
+            title: senderName,
+            body: messageText,
+          },
+          data: {
+            chatId: chatId,
+            senderId: senderId,
+            type: 'chat_message',
+          },
+          apns: {
+            payload: {
+              aps: {
+                sound: 'default',
+                badge: 1,
+                'content-available': 1,
+              },
+            },
+          },
+          android: {
+            priority: 'high',
+            notification: {
+              sound: 'default',
+              channelId: 'chat_messages',
+            },
+          },
+        });
+      });
+      
+      const results = await Promise.allSettled(notifications);
+      
+      let successCount = 0;
+      let failedTokens = [];
+      
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          successCount++;
+          console.log('✅ Notification sent to:', validTokens[index].recipientId);
+        } else {
+          console.error('❌ Failed:', validTokens[index].recipientId, result.reason?.message);
+          
+          const error = result.reason;
+          if (error.code === 'messaging/invalid-registration-token' ||
+              error.code === 'messaging/registration-token-not-registered') {
+            failedTokens.push(validTokens[index]);
+          }
+        }
+      });
+      
+      console.log(`✅ Sent ${successCount}/${validTokens.length} notifications`);
+      
+      if (failedTokens.length > 0) {
+        const cleanup = failedTokens.map(({ recipientId }) => {
+          return admin.firestore()
+            .collection('users')
+            .doc(recipientId)
+            .update({ 
+              fcmToken: admin.firestore.FieldValue.delete() 
+            });
+        });
+        
+        await Promise.all(cleanup);
+        console.log(`🧹 Cleaned up ${failedTokens.length} invalid tokens`);
+      }
+    } catch (error) {
+      console.error('❌ Error:', error);
     }
   }
-  
-  console.log("═══════════════════════════════════════");
-  
-  if (!context.auth) {
-    return {
-      success: false,
-      message: "Not authenticated",
-      debug: {
-        contextKeys: Object.keys(context),
-        authType: typeof context.auth,
-      },
-    };
-  }
-  
-  return {
-    success: true,
-    uid: context.auth.uid,
-    email: context.auth.token.email || "no email",
-  };
-});
+);

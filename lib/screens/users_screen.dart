@@ -308,7 +308,7 @@ class _UserListScreenState extends State<UserListScreen> {
                         deactivateUser(user);
                       }
                     },
-                    activeColor: Colors.brown[500], // kružić kada je uključen
+                    activeThumbColor: Colors.brown[500], // kružić kada je uključen
                     inactiveThumbColor:
                         Colors.brown[500], // kružić kada je isključen
                     activeTrackColor:

@@ -280,7 +280,7 @@ class ChangeUserDataScreenState extends State<ChangeUserDataScreen> {
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                   ),
-                                  value: selectedFruitType,
+                                  initialValue: selectedFruitType,
                                   hint: Text("Voćna vrsta",
                                       style: TextStyle(fontSize: 14)),
                                   items: GetFruitTypes().map((fruit) {

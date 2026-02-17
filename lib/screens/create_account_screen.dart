@@ -56,8 +56,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         await _userService.createNewUser(CreateUserParam(
       id: '',
       name: _nameController.text,
-      email: _nameController.text.toLowerCase().replaceAll(' ', '') +
-          "@fruitcarepro.com",
+      email: "${_nameController.text.toLowerCase().replaceAll(' ', '')}@fruitcarepro.com",
       password: _passwordController.text,
       city: _cityController.text,
       phone: _phoneNumberController.text,
@@ -275,7 +274,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        value: selectedFruitType,
+                        initialValue: selectedFruitType,
                         hint:
                             Text("Voćna vrsta", style: TextStyle(fontSize: 14)),
                         items: GetFruitTypes().map((fruit) {

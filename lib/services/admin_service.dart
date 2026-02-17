@@ -17,8 +17,8 @@ class AdminService {
       throw Exception('Niste prijavljeni');
     }
 
-    print('🔍 FirebaseAuth.currentUser: ${currentUser?.uid}');
-    print('🔍 Email: ${currentUser?.email}');
+    print('🔍 FirebaseAuth.currentUser: ${currentUser.uid}');
+    print('🔍 Email: ${currentUser.email}');
     try {
       final result = await _functions.httpsCallable('adminResetPassword').call({
         'userId': userId,

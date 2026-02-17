@@ -1,3 +1,4 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:fruit_care_pro/firebase_options.dart';
 import 'package:fruit_care_pro/screens/change_password_screen.dart';
 import 'package:fruit_care_pro/screens/change_user_data_screen.dart';
@@ -13,18 +14,27 @@ import 'package:fruit_care_pro/models/user.dart';
 import 'package:fruit_care_pro/services/advertisement_service.dart';
 import 'package:fruit_care_pro/services/chat_service.dart';
 import 'package:fruit_care_pro/services/fruit_types_service.dart';
+import 'package:fruit_care_pro/services/notification_service.dart';
 import 'package:fruit_care_pro/services/user_service.dart';
 import 'package:provider/provider.dart';
 import 'package:fruit_care_pro/user_notifier.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   await Future.delayed(Duration(milliseconds: 500));
+  
   // Omogući Crashlytics slanje podataka
   await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(true);
 
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+  // Initialize notifications
+  await NotificationService.initialize();
+  
   runApp(MultiProvider(
     providers: [
       // User state
@@ -32,24 +42,61 @@ void main() async {
 
       // Services (singletons)
       Provider(create: (_) => UserService()),
-
       Provider(create: (_) => ChatService()),
-
       Provider(create: (_) => FruitTypesService()),
-
       Provider(create: (_) => AdvertisementService()),
     ],
     child: const MyApp(),
   ));
 }
 
-class MyApp extends StatelessWidget {
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  debugPrint('📩 Background message (main.dart): ${message.notification?.title}');
+}
+
+
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  // Global key za navigaciju
+  final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+  @override
+  void initState() {
+    super.initState();
+    
+    // Setup callback za notification tap
+    NotificationService.onNotificationTap = (chatId) {
+      debugPrint('🔔 Navigating to chat: $chatId');
+      
+      // Navigiraj do group chat screen-a
+      // Pretpostavljam da trebaš chatId, možeš dodati ostale argumente ako treba
+      navigatorKey.currentState?.pushNamed(
+        '/group-chat',
+        arguments: {
+          'chatId': chatId,
+          // Dodaj ostale argumente ako su potrebni
+          // 'fruitTypeId': ...,
+          // 'fruitTypeName': ...,
+        },
+      );
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      initialRoute: '/', // Početna ruta
+      navigatorKey: navigatorKey, // Dodaj navigatorKey
+      initialRoute: '/',
       routes: {
         '/': (context) => LoginScreen(),
         '/login': (context) => LoginScreen(),
@@ -81,60 +128,3 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-// class SplashScreen extends StatelessWidget {
-//   const SplashScreen({super.key});
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return FutureBuilder<User?>(
-//       future: _getCurrentUser(),
-//       builder: (context, snapshot) {
-//         // Dok se podaci učitavaju
-//         if (snapshot.connectionState == ConnectionState.waiting) {
-//           return const Scaffold(
-//             body: Center(child: CircularProgressIndicator()),
-//           );
-//         }
-
-//         // Ako dođe do greške
-//         if (snapshot.hasError) {
-//           return Scaffold(
-//             body: Center(
-//               child: Text('Greška prilikom učitavanja korisnika: ${snapshot.error}'),
-//             ),
-//           );
-//         }
-
-//         // Ako nema podataka
-//         if (!snapshot.hasData || snapshot.data == null) {
-//           return LoginScreen();
-//         }
-
-//         // Ako su podaci uspešno učitani
-//         final user = snapshot.data!;
-//         final isAdmin = user.email == 'admin@example.com'; // Primer logike za admina
-//         final route = isAdmin ? '/admin' : '/user';
-        
-//         // Navigacija ka odgovarajućem ekranu
-//         Future.delayed(
-//           const Duration(seconds: 2),
-//           () => Navigator.pushReplacementNamed(context, route, arguments: AppUser(email: user.email)),
-//         );
-
-//         // Prikazivanje praznog ekrana dok se navigacija izvršava
-//         return const Scaffold(
-//           body: Center(child: CircularProgressIndicator()),
-//         );
-//       },
-//     );
-//   }
-
-//   Future<User?> _getCurrentUser() async {
-//     final user = FirebaseAuth.instance.currentUser;
-//     if (user != null) {
-//       await user.reload();
-//       return FirebaseAuth.instance.currentUser;
-//     }
-//     return null;
-//   }
-// }

@@ -1,4 +1,5 @@
 /// Custom exceptions for FruitTypesService operations
+library;
 
 /// Base exception class for all fruit type related errors
 class FruitTypeException implements Exception {

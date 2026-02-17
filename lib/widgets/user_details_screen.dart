@@ -89,13 +89,13 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
     void _onItemTapped(int index) {
     switch (index) {
       case 0:
-        if (currentUser?.isAdmin ?? false) {
+        if (currentUser.isAdmin ?? false) {
           Navigator.push(
               context,
               MaterialPageRoute(
                   builder: (context) => AdminMainScreen()));
         } else {
-          print(currentUser?.name);
+          print(currentUser.name);
           Navigator.push(
               context,
               MaterialPageRoute(
@@ -103,7 +103,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
         }
         break;
       case 1:
-        if (currentUser?.isAdmin ?? false) {
+        if (currentUser.isAdmin ?? false) {
           Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const UserListScreen()),
@@ -117,7 +117,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
         }
         break;
       case 2:
-        if (currentUser?.isAdmin ?? false) {
+        if (currentUser.isAdmin ?? false) {
           Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const FruitListPage()),
@@ -128,12 +128,12 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
           Navigator.push(
             context,
             MaterialPageRoute(
-                builder: (context) => UserDetailsScreen(userId: currentUser?.id),
+                builder: (context) => UserDetailsScreen(userId: currentUser.id),
           ));
         }
         break;
       case 3:
-        if (currentUser?.isAdmin ?? false) {
+        if (currentUser.isAdmin ?? false) {
           Navigator.push(
             context,
             MaterialPageRoute(

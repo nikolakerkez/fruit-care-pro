@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>${PRODUCT_NAME}</string>
+	<string>Fruit Care Pro</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -32,8 +32,16 @@
 	<string>Potrebna nam je dozvola za dodavanje slika u galeriju</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Potrebna nam je pristup galeriji da biste mogli da šaljete slike</string>
+	<key>NSUserNotificationsUsageDescription</key>
+	<string>Dozvolite notifikacije da biste primali poruke u chatu</string>
+	<key>FirebaseAppDelegateProxyEnabled</key>
+	<false/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

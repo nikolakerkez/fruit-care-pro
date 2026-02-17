@@ -8,7 +8,7 @@ class FullScreenImageViewer extends StatelessWidget {
   final String? localPath;
   final String? messageId; // 🔥 Dodaj messageId
 
-  const FullScreenImageViewer({
+  const FullScreenImageViewer({super.key, 
     this.imageUrl,
     this.localPath,
     this.messageId,

@@ -1,4 +1,5 @@
 /// Custom exceptions for AdvertisementService operations
+library;
 
 /// Base exception class for all advertisement related errors
 class AdvertisementException implements Exception {
