@@ -56,13 +56,12 @@ workflows:
           distribution_type: app_store
           bundle_identifier: rs.nikolakerkez.fruitcarepro
         vars:
-          APP_STORE_APPLE_ID: 1555555551
+          APP_STORE_APPLE_ID: 6757115255
         flutter: stable
       scripts:
         - name: Set up code signing settings on Xcode project
           script: | 
             xcode-project use-profiles
-              --custom-export-options='{"testFlightInternalTestingOnly": true}'
         - name: Get Flutter packages
           script: | 
             flutter pub get
