@@ -40,17 +40,15 @@ workflows:
         submit_as_draft: true
 
   ios-workflow:
-    name: iOS Fast Build
+    name: iOS TestFlight Build
     max_build_duration: 60
     integrations:
-      app_store_connect: CodeMagic
+      app_store_connect: codemagic
     environment:
       flutter: stable
       ios_signing:
         distribution_type: app_store
         bundle_identifier: rs.nikolakerkez.fruitcarepro
-      vars:
-        APP_STORE_APPLE_ID: 6757115255
     scripts:
       - name: Get Flutter packages
         script: |
@@ -62,7 +60,7 @@ workflows:
         script: |
           flutter build ipa --release \
             --build-name=1.0.0 \
-            --build-number=$(($(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID") + 1))
+            --build-number=$(($(app-store-connect get-latest-app-store-build-number "6757115255") + 1))
     artifacts:
       - build/ios/ipa/*.ipa
     publishing:
