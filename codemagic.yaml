@@ -49,6 +49,7 @@ workflows:
       ios_signing:
         distribution_type: app_store
         bundle_identifier: rs.nikolakerkez.fruitcarepro
+        automatic_signing: true
     scripts:
       - name: Get Flutter packages
         script: |
@@ -59,7 +60,6 @@ workflows:
       - name: Build IPA
         script: |
           flutter build ipa --release --export-method=app-store --build-name=1.0.0 --build-number=1
-
     artifacts:
       - build/ios/ipa/*.ipa
     publishing:
@@ -73,5 +73,5 @@ workflows:
         auth: integration
         submit_to_testflight: true
         beta_groups:
-          - Internal testers
+          - Internal Testers
         submit_to_app_store: false
