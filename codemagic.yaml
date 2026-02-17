@@ -5,7 +5,7 @@ workflows:
     instance_type: mac_mini_m2
 
     integrations:
-      app_store_connect: codemagic
+      app_store_connect: codemagic  # koristi tvoj Team integration
 
     environment:
       flutter: stable
@@ -50,13 +50,10 @@ workflows:
           failure: true
 
       app_store_connect:
-        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
-        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
         submit_to_testflight: true
         beta_groups:
           - Internal Testers
-        submit_to_app_store: false
+        submit_to_app_store: false  # ako želiš direktno na App Store, postavi true
 
 
   android-workflow:
