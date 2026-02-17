@@ -39,38 +39,38 @@ workflows:
         track: $GOOGLE_PLAY_TRACK
         submit_as_draft: true
 
-ios-workflow:
-  name: iOS TestFlight Build
-  max_build_duration: 60
-  integrations:
-    app_store_connect: CodeMagic
-  environment:
-    flutter: stable
-    ios_signing:
-      distribution_type: app_store
-      bundle_identifier: rs.nikolakerkez.fruitcarepro
-  scripts:
-    - name: Get Flutter packages
-      script: |
-        flutter pub get
-    - name: Install pods
-      script: |
-        find . -name "Podfile" -execdir pod install \;
-    - name: Build IPA
-      script: |
-        flutter build ipa --release --export-method=app-store --build-name=1.0.0 --build-number=1
-  artifacts:
-    - build/ios/ipa/*.ipa
-  publishing:
-    email:
-      recipients:
-        - nikolakerkez.rs@gmail.com
-      notify:
-        success: true
-        failure: false
-    app_store_connect:
-      auth: integration
-      submit_to_testflight: true
-      beta_groups:
-        - Internal Testers
-      submit_to_app_store: false
+  ios-workflow:
+    name: iOS TestFlight Build
+    max_build_duration: 60
+    integrations:
+      app_store_connect: CodeMagic
+    environment:
+      flutter: stable
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: rs.nikolakerkez.fruitcarepro
+    scripts:
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+      - name: Install pods
+        script: |
+          find . -name "Podfile" -execdir pod install \;
+      - name: Build IPA
+        script: |
+          flutter build ipa --release --export-method=app-store --build-name=1.0.0 --build-number=1
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      email:
+        recipients:
+          - nikolakerkez.rs@gmail.com
+        notify:
+          success: true
+          failure: false
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        beta_groups:
+          - Internal Testers
+        submit_to_app_store: false
