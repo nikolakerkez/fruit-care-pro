@@ -3,46 +3,44 @@ workflows:
     name: iOS Workflow
     max_build_duration: 120
     instance_type: mac_mini_m2
+
     integrations:
       app_store_connect: codemagic
+
     environment:
+      flutter: stable
+      xcode: latest
+
       ios_signing:
         distribution_type: app_store
         bundle_identifier: rs.nikolakerkez.fruitcarepro
-      vars:
-        BUNDLE_ID: "rs.nikolakerkez.fruitcarepro"
-        XCODE_WORKSPACE: "Runner.xcworkspace"
-        XCODE_SCHEME: "Runner"
-      flutter: stable
-      xcode: latest
-      cocoapods: default
+        automatic_signing: true
+        team_id: T5N9WUPD6J
+
     scripts:
-      - name: Set up code signing settings on Xcode project
-        script: |
-          xcode-project use-profiles
       - name: Get Flutter packages
         script: |
-          flutter packages pub get
-      - name: Install pods
-        script: |
-          find . -name "Podfile" -execdir pod install \;
+          flutter pub get
+
       - name: Flutter analyze
         script: |
           flutter analyze
+
       - name: Flutter test
         script: |
           flutter test
         ignore_failure: true
-      - name: Flutter build ipa
+
+      - name: Build IPA
         script: |
           flutter build ipa --release \
             --build-name=1.0.$BUILD_NUMBER \
-            --build-number=$BUILD_NUMBER \
-            --export-options-plist=/Users/builder/export_options.plist
+            --build-number=$BUILD_NUMBER
+
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
-      - flutter_drive.log
+
     publishing:
       email:
         recipients:
@@ -50,6 +48,7 @@ workflows:
         notify:
           success: true
           failure: true
+
       app_store_connect:
         api_key: $APP_STORE_CONNECT_PRIVATE_KEY
         key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
@@ -59,43 +58,44 @@ workflows:
           - Internal Testers
         submit_to_app_store: false
 
+
   android-workflow:
     name: Android Workflow
     max_build_duration: 120
     instance_type: linux_x2
+
     environment:
+      flutter: stable
       android_signing:
         - keystore_reference
-      groups:
-        - google_play
+
       vars:
         PACKAGE_NAME: "rs.nikolakerkez.fruitcarepro"
-      flutter: stable
-      xcode: latest
-      cocoapods: default
+
     scripts:
-      - name: Set up local.properties
-        script: |
-          echo "flutter.sdk=$HOME/programs/flutter" > "$CM_BUILD_DIR/android/local.properties"
       - name: Get Flutter packages
         script: |
-          flutter packages pub get
+          flutter pub get
+
       - name: Flutter analyze
         script: |
           flutter analyze
+
       - name: Flutter test
         script: |
           flutter test
         ignore_failure: true
-      - name: Build AAB with Flutter
+
+      - name: Build AAB
         script: |
           flutter build appbundle --release \
             --build-name=1.0.$BUILD_NUMBER \
             --build-number=$BUILD_NUMBER
+
     artifacts:
       - build/**/outputs/**/*.aab
       - build/**/outputs/**/mapping.txt
-      - flutter_drive.log
+
     publishing:
       email:
         recipients:
@@ -103,6 +103,7 @@ workflows:
         notify:
           success: true
           failure: true
+
       google_play:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
         track: internal
