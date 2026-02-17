@@ -5,7 +5,7 @@ workflows:
     instance_type: mac_mini_m2
 
     integrations:
-      app_store_connect: codemagic  # koristi tvoj Team integration
+      app_store_connect: codemagic  # koristi Team integration za signing i upload
 
     environment:
       flutter: stable
@@ -14,8 +14,7 @@ workflows:
       ios_signing:
         distribution_type: app_store
         bundle_identifier: rs.nikolakerkez.fruitcarepro
-        automatic_signing: true
-        team_id: T5N9WUPD6J
+        # ✅ automatic signing preko integracije, nema team_id ili automatic_signing
 
     scripts:
       - name: Get Flutter packages
@@ -50,10 +49,11 @@ workflows:
           failure: true
 
       app_store_connect:
+        inherit: true   # koristi integraciju za autentifikaciju i signing
         submit_to_testflight: true
         beta_groups:
           - Internal Testers
-        submit_to_app_store: false  # ako želiš direktno na App Store, postavi true
+        submit_to_app_store: false  # ako želiš direktan App Store upload, stavi true
 
 
   android-workflow:
