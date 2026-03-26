@@ -97,7 +97,7 @@ class _SplashScreenState extends State<SplashScreen> {
         fit: StackFit.expand,
         children: [
           Image.asset(
-            'assets/images/main_image.jpeg',
+            'assets/images/OIG1.jpeg',
             fit: BoxFit.cover,
           ),
           Positioned(
