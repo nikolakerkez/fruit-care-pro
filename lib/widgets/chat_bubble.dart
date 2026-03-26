@@ -35,8 +35,24 @@ class ChatBubble extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: isCurrentUser ? Colors.green[600] : Colors.brown[500],
+                  gradient: isCurrentUser
+                      ? const LinearGradient(
+                          colors: [Color(0xFF1B3A2D), Color(0xFF2E7D52)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        )
+                      : null,
+                  color: isCurrentUser ? null : Colors.white,
                   borderRadius: BorderRadius.circular(12),
+                  boxShadow: isCurrentUser
+                      ? null
+                      : [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.08),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
                 ),
                 child: Column(
                   crossAxisAlignment: isCurrentUser
@@ -114,7 +130,7 @@ Widget _buildUploadingImage(double progress) {
           if (localPath != null)
             ColorFiltered(
               colorFilter: ColorFilter.mode(
-                Colors.black.withOpacity(0.3),
+                Colors.black.withValues(alpha: 0.3),
                 BlendMode.darken,
               ),
               child: Image.file(
@@ -260,7 +276,7 @@ Widget _buildImageWidget() {
         Text(
           formattedTime,
           style: TextStyle(
-            color: Colors.white.withOpacity(0.7),
+            color: isCurrentUser ? Colors.white.withValues(alpha: 0.7) : Colors.black45,
             fontSize: 11,
           ),
         ),
@@ -276,7 +292,10 @@ Widget _buildImageWidget() {
   Widget _buildText() {
     return Text(
       messageData['message'],
-      style: const TextStyle(color: Colors.white),
+      style: TextStyle(
+        color: isCurrentUser ? Colors.white : const Color(0xFF1A1A1A),
+        fontSize: 15,
+      ),
     );
   }
 
@@ -292,7 +311,7 @@ Widget _buildImageWidget() {
     return Icon(
       Icons.done_all,
       size: 16,
-      color: Colors.white.withOpacity(0.6),
+      color: Colors.white.withValues(alpha: 0.6),
     );
   }
 }

@@ -92,6 +92,7 @@ class _UserMainScreenState extends State<UserMainScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F7F5),
       appBar: _buildAppBar(),
       body: _buildBody(),
       bottomNavigationBar: _buildBottomNavigationBar(),
@@ -99,23 +100,12 @@ class _UserMainScreenState extends State<UserMainScreen> {
   }
 
   PreferredSizeWidget _buildAppBar() {
-    return PreferredSize(
-      preferredSize: const Size.fromHeight(kToolbarHeight + 3),
-      child: Container(
-        color: Colors.green[800],
-        child: Column(
-          children: [
-            AppBar(
-              elevation: 0,
-              centerTitle: true,
-              backgroundColor: Colors.transparent,
-              title: const Text(
-                'Poruke',
-                style: TextStyle(color: Colors.white),
-              ),
-            )
-          ],
-        ),
+    return AppBar(
+      centerTitle: true,
+      title: const Text('Poruke'),
+      bottom: const PreferredSize(
+        preferredSize: Size.fromHeight(2),
+        child: ColoredBox(color: Color(0xFF2E7D52), child: SizedBox(height: 2, width: double.infinity)),
       ),
     );
   }
@@ -132,19 +122,23 @@ class _UserMainScreenState extends State<UserMainScreen> {
           return const Center(child: Text('Nema poruka'));
         }
 
-        return ListView.separated(
+        return ListView.builder(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           itemCount: snapshot.data!.length,
-          separatorBuilder: (_, __) => const Divider(
-            color: Colors.grey,
-            thickness: 1,
-            height: 12,
-          ),
           itemBuilder: (context, index) {
             final chat = snapshot.data![index];
-            return _ChatListTile(
-              chat: chat,
-              userId: _currentUser.id,
-              onTap: () => _handleChatTap(chat),
+            return Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              elevation: 0,
+              color: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: _ChatListTile(
+                chat: chat,
+                userId: _currentUser.id,
+                onTap: () => _handleChatTap(chat),
+              ),
             );
           },
         );
@@ -153,36 +147,28 @@ class _UserMainScreenState extends State<UserMainScreen> {
   }
 
   Widget _buildBottomNavigationBar() {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(
-            color: Colors.brown[500] ?? Colors.brown,
-            width: 2,
-          ),
+    return BottomNavigationBar(
+      currentIndex: 0,
+      backgroundColor: Colors.white,
+      selectedItemColor: const Color(0xFF388E3C),
+      unselectedItemColor: Colors.grey[400],
+      elevation: 8,
+      type: BottomNavigationBarType.fixed,
+      onTap: _onItemTapped,
+      items: const [
+        BottomNavigationBarItem(
+          icon: Icon(Icons.chat),
+          label: 'Poruke',
         ),
-      ),
-      child: BottomNavigationBar(
-        currentIndex: 0,
-        selectedItemColor: Colors.brown[500],
-        unselectedItemColor: Colors.grey,
-        type: BottomNavigationBarType.fixed,
-        onTap: _onItemTapped,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat),
-            label: 'Poruke',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.search),
-            label: 'Istraži',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_2_sharp),
-            label: 'Profil',
-          ),
-        ],
-      ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.search),
+          label: 'Istraži',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.person_2_sharp),
+          label: 'Profil',
+        ),
+      ],
     );
   }
 }
@@ -218,7 +204,7 @@ class _ChatListTile extends StatelessWidget {
               lastMessage == null || lastMessage.text == '' || !hasUnread
                   ? FontWeight.normal
                   : FontWeight.bold,
-          fontSize: 16.5,
+          fontSize: 15,
         ),
       ),
       subtitle: _buildSubtitle(lastMessage, hasUnread),
@@ -239,14 +225,11 @@ class _ChatListTile extends StatelessWidget {
 
   Widget _buildAvatar(String? thumbUrl) {
     return Container(
-      width: 60,
-      height: 60,
-      decoration: BoxDecoration(
+      width: 48,
+      height: 48,
+      decoration: const BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(
-          color: Colors.brown[300] ?? Colors.brown,
-          width: 2,
-        ),
+        color: Color(0xFFE8F5E9),
       ),
       child: ClipOval(
         child: AspectRatio(

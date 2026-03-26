@@ -34,8 +34,6 @@
 	<string>Potrebna nam je pristup galeriji da biste mogli da šaljete slike</string>
 	<key>NSUserNotificationsUsageDescription</key>
 	<string>Dozvolite notifikacije da biste primali poruke u chatu</string>
-	<key>FirebaseAppDelegateProxyEnabled</key>
-	<false/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>

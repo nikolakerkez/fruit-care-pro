@@ -172,161 +172,120 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(kToolbarHeight + 4),
-        child: Container(
-          color: Colors.green[800],
-          child: Column(
-            children: [
-              AppBar(
-                elevation: 0,
-                centerTitle: true,
-                backgroundColor: Colors.transparent,
-                title: const Text(
-                  'Izmena šifre',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
-              Container(
-                height: 4,
-                color: Colors.brown[500],
-              ),
-            ],
-          ),
-        ),
+      appBar: AppBar(
+        title: const Text('Izmena šifre'),
       ),
       body: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              // Logo section
-              Container(
-                color: Colors.transparent,
-                padding: const EdgeInsets.all(30),
-                child: const Icon(
-                  Icons.agriculture_rounded,
-                  size: 150,
-                ),
-              ),
-
-              // Old password field
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
-                child: generateTextField(
-                  labelText: "Stara šifra",
-                  controller: _oldPasswordController,
-                  iconData: Icons.lock,
-                  isPassword: _obscureOldPassword,
-                  validator: _validateOldPassword,
-                  enabled: !_isLoading,
-                  sufixIconWidget: IconButton(
-                    icon: Icon(
-                      _obscureOldPassword
-                          ? Icons.visibility_off
-                          : Icons.visibility,
-                    ),
-                    onPressed: () {
-                      setState(
-                          () => _obscureOldPassword = !_obscureOldPassword);
-                    },
-                  ),
-                ),
-              ),
-
-              // New password field
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
-                child: generateTextField(
-                  labelText: "Nova šifra",
-                  controller: _newPasswordController,
-                  iconData: Icons.lock,
-                  isPassword: _obscureNewPassword,
-                  validator: _validateNewPassword,
-                  enabled: !_isLoading,
-                  sufixIconWidget: IconButton(
-                    icon: Icon(
-                      _obscureNewPassword
-                          ? Icons.visibility_off
-                          : Icons.visibility,
-                    ),
-                    onPressed: () {
-                      setState(
-                          () => _obscureNewPassword = !_obscureNewPassword);
-                    },
-                  ),
-                ),
-              ),
-
-              // Confirm password field
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
-                child: generateTextField(
-                  labelText: "Ponovi novu šifru",
-                  controller: _confirmPasswordController,
-                  iconData: Icons.lock_outline,
-                  isPassword: _obscureConfirmPassword,
-                  validator: _validateConfirmPassword,
-                  enabled: !_isLoading,
-                  sufixIconWidget: IconButton(
-                    icon: Icon(
-                      _obscureConfirmPassword
-                          ? Icons.visibility_off
-                          : Icons.visibility,
-                    ),
-                    onPressed: () {
-                      setState(() =>
-                          _obscureConfirmPassword = !_obscureConfirmPassword);
-                    },
-                  ),
-                ),
-              ),
-
-              // Submit button
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
-                child: _isLoading
-                    ? const CircularProgressIndicator()
-                    : generateButton(
-                        text: "Potvrdi",
-                        onPressed: _handleChangePassword,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.05),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
                       ),
-              ),
-
-              // Error message
-              if (_errorMessage != null) ...[
-                const SizedBox(height: 6),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 40),
-                  child: Text(
-                    _errorMessage!,
-                    style: const TextStyle(
-                      color: Colors.red,
-                      fontSize: 12,
-                    ),
-                    textAlign: TextAlign.center,
+                    ],
+                  ),
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      generateTextField(
+                        labelText: "Stara šifra",
+                        controller: _oldPasswordController,
+                        iconData: Icons.lock_outline,
+                        isPassword: _obscureOldPassword,
+                        validator: _validateOldPassword,
+                        enabled: !_isLoading,
+                        sufixIconWidget: IconButton(
+                          icon: Icon(
+                            _obscureOldPassword
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                            color: const Color(0xFF6B7280),
+                            size: 20,
+                          ),
+                          onPressed: () => setState(
+                              () => _obscureOldPassword = !_obscureOldPassword),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      generateTextField(
+                        labelText: "Nova šifra",
+                        controller: _newPasswordController,
+                        iconData: Icons.lock_outline,
+                        isPassword: _obscureNewPassword,
+                        validator: _validateNewPassword,
+                        enabled: !_isLoading,
+                        sufixIconWidget: IconButton(
+                          icon: Icon(
+                            _obscureNewPassword
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                            color: const Color(0xFF6B7280),
+                            size: 20,
+                          ),
+                          onPressed: () => setState(
+                              () => _obscureNewPassword = !_obscureNewPassword),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      generateTextField(
+                        labelText: "Ponovi novu šifru",
+                        controller: _confirmPasswordController,
+                        iconData: Icons.lock_outline,
+                        isPassword: _obscureConfirmPassword,
+                        validator: _validateConfirmPassword,
+                        enabled: !_isLoading,
+                        sufixIconWidget: IconButton(
+                          icon: Icon(
+                            _obscureConfirmPassword
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                            color: const Color(0xFF6B7280),
+                            size: 20,
+                          ),
+                          onPressed: () => setState(() =>
+                              _obscureConfirmPassword =
+                                  !_obscureConfirmPassword),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      _isLoading
+                          ? const CircularProgressIndicator(
+                              color: Color(0xFF388E3C))
+                          : generateButton(
+                              text: "Potvrdi izmenu",
+                              icon: Icons.check_rounded,
+                              onPressed: _handleChangePassword,
+                            ),
+                      if (_errorMessage != null) ...[
+                        const SizedBox(height: 14),
+                        Text(
+                          _errorMessage!,
+                          style: const TextStyle(
+                              color: Colors.red, fontSize: 13),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-              ],
-
-              // Password requirements hint (optional)
-              const SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40),
-                child: Text(
+                const SizedBox(height: 16),
+                Text(
                   'Šifra mora imati najmanje 6 karaktera',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: Colors.grey[500], fontSize: 12),
                   textAlign: TextAlign.center,
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

@@ -70,7 +70,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final StreamController<List<DocumentSnapshot>> _chatStreamController =
-      StreamController<List<DocumentSnapshot>>.broadcast();
+      StreamController<List<DocumentSnapshot>>();
 
   // State variables
   String _currentUserId = '';
@@ -94,6 +94,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   void initState() {
     super.initState();
     _initializeScreen();
+    Future.delayed(const Duration(seconds: 15), () {
+      if (mounted && _isLoading) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Server ne odgovara. Pokušajte ponovo.';
+        });
+      }
+    });
   }
 
   @override
@@ -136,14 +144,20 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       // Extract route parameters
       await _extractRouteParameters();
 
-      // Load other user info
-      await _loadOtherUser();
+      // Load other user info (with timeout)
+      await _loadOtherUser().timeout(
+        const Duration(seconds: 8),
+        onTimeout: () => throw Exception('Timeout pri učitavanju podataka korisnika'),
+      );
 
-      // Mark messages as read
-      await _markMessagesAsRead();
+      // Mark messages as read — non-critical, run in background
+      _markMessagesAsRead();
 
       // Setup scroll listener for pagination
       _setupScrollListener();
+
+      // Load initial messages
+      _loadMoreMessages();
 
       // Finalize initialization
       if (mounted) {
@@ -247,7 +261,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
 
   /// Stream of chat messages with pagination
   Stream<List<DocumentSnapshot>> _listenToChatsRealTime() {
-    _loadMoreMessages();
     return _chatStreamController.stream;
   }
 
@@ -534,20 +547,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
 
   /// Build app bar
   PreferredSizeWidget _buildAppBar() {
-    return PreferredSize(
-      preferredSize: const Size.fromHeight(kToolbarHeight + 3),
-      child: Container(
-        color: Colors.green[800],
-        child: Column(
-          children: [
-            AppBar(
-              elevation: 0,
-              centerTitle: true,
-              backgroundColor: Colors.transparent,
-              title: _buildAppBarTitle(),
-            ),
-            Container(height: 3, color: Colors.brown[500]),
-          ],
+    return AppBar(
+      centerTitle: false,
+      title: _buildAppBarTitle(),
+      bottom: const PreferredSize(
+        preferredSize: Size.fromHeight(2),
+        child: ColoredBox(
+          color: Color(0xFF2E7D52),
+          child: SizedBox(height: 2, width: double.infinity),
         ),
       ),
     );
@@ -570,7 +577,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
           onTap: () => _navigateToUserDetails(_otherUserId),
           child: Text(
             displayName,
-            style: const TextStyle(color: Colors.white, fontSize: 22),
+            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
           ),
         ),
       ],
@@ -580,13 +587,13 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   /// Build avatar
   Widget _buildAvatar(String? thumbUrl) {
     return Container(
-      width: 50,
-      height: 50,
+      width: 36,
+      height: 36,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: Colors.grey[300],
         border: Border.all(
-          color: Colors.brown[300] ?? Colors.brown,
+          color: const Color(0xFF2E7D52),
           width: 2,
         ),
       ),
@@ -611,12 +618,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     return StreamBuilder<List<DocumentSnapshot>>(
       stream: _listenToChatsRealTime(),
       builder: (context, snapshot) {
-        // Loading state
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        // Empty state
+        // Empty state (also covers waiting - don't block UI on stream)
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return const Center(child: Text('Započnite razgovor.'));
         }
@@ -687,39 +689,42 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     final isPremium = _isAdmin ? true : (_currentUser?.isPremium ?? false);
 
     return SafeArea(
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        child: Opacity(
-          opacity: isPremium ? 1.0 : 0.6,
-          child: AbsorbPointer(
-            absorbing: !isPremium,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: generateTextField(
-                      labelText: isPremium
-                          ? 'Unesite poruku'
-                          : 'Niste premium korisnik',
-                      controller: _messageController,
-                    ),
+      child: Opacity(
+        opacity: isPremium ? 1.0 : 0.6,
+        child: AbsorbPointer(
+          absorbing: !isPremium,
+          child: Container(
+            color: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: generateTextField(
+                    labelText: isPremium ? 'Unesite poruku' : 'Niste premium korisnik',
+                    controller: _messageController,
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.image),
-                    color: isPremium ? Colors.brown[500] : Colors.grey,
-                    onPressed: isPremium ? _sendImageMessage : null,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.send),
-                    color: isPremium ? Colors.brown[500] : Colors.grey,
-                    onPressed: isPremium ? _sendTextMessage : null,
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 4),
+                _buildInputButton(Icons.image_outlined, isPremium ? _sendImageMessage : () {}),
+                _buildInputButton(Icons.send_rounded, isPremium ? _sendTextMessage : () {}),
+              ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildInputButton(IconData icon, VoidCallback onPressed) {
+    return Container(
+      margin: const EdgeInsets.only(left: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF388E3C),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: IconButton(
+        icon: Icon(icon, color: Colors.white, size: 20),
+        onPressed: onPressed,
       ),
     );
   }

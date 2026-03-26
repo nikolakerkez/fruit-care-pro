@@ -1,29 +1,20 @@
 import 'dart:io';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:fruit_care_pro/firebase_options.dart';
-
-// Top-level function za background messages
-@pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  debugPrint('📩 Background message: ${message.notification?.title}');
-}
 
 class NotificationService {
   static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+  static RemoteMessage? _pendingInitialMessage;
+
   static final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // Callback za navigaciju kada se tapne notifikacija
-  static Function(String chatId)? onNotificationTap;
+  static Function(String chatId, String? senderId)? onNotificationTap;
 
   /// Inicijalizacija notification service-a
   static Future<void> initialize() async {
@@ -41,8 +32,7 @@ class NotificationService {
       if (settings.authorizationStatus == AuthorizationStatus.authorized) {
         debugPrint('✅ User granted notification permission');
       } else {
-        debugPrint('❌ User declined notification permission');
-        return;
+        debugPrint('⚠️ User declined notification permission, continuing without notifications');
       }
 
       // Listen to token refresh
@@ -69,9 +59,10 @@ class NotificationService {
 
       // Check if app was opened from a notification
       final initialMessage = await _messaging.getInitialMessage();
-      if (initialMessage != null) {
-        _handleNotificationTap(initialMessage);
-      }
+        if (initialMessage != null) {
+          _pendingInitialMessage = initialMessage;
+          debugPrint('📩 Initial message saved, waiting for app to be ready');
+        }
 
       debugPrint('✅ NotificationService initialized successfully');
     } catch (e, stackTrace) {
@@ -96,6 +87,16 @@ class NotificationService {
       debugPrint('❌ Error saving token after login: $e');
     }
   }
+
+static void handlePendingNotification() {
+  debugPrint('🔔 handlePendingNotification - pending: $_pendingInitialMessage');
+  debugPrint('🔔 onNotificationTap callback set: ${onNotificationTap != null}');
+  
+  if (_pendingInitialMessage != null) {
+    _handleNotificationTap(_pendingInitialMessage!);
+    _pendingInitialMessage = null;
+  }
+}
 
   /// Sačuvaj FCM token
   static Future<void> _saveFCMToken() async {
@@ -154,7 +155,7 @@ class NotificationService {
       onDidReceiveNotificationResponse: (NotificationResponse response) {
         if (response.payload != null) {
           debugPrint('📱 Local notification tapped: ${response.payload}');
-          onNotificationTap?.call(response.payload!);
+          onNotificationTap?.call(response.payload!, null);
         }
       },
     );
@@ -235,12 +236,12 @@ class NotificationService {
   /// Handle notification tap
   static void _handleNotificationTap(RemoteMessage message) {
     final String? chatId = message.data['chatId'] as String?;
+    final String? senderId = message.data['senderId'] as String?;
 
-    debugPrint('👆 Notification tapped - chatId: $chatId');
+    debugPrint('👆 Notification tapped - chatId: $chatId, senderId: $senderId');
 
     if (chatId != null) {
-      // Pozovi callback za navigaciju
-      onNotificationTap?.call(chatId);
+      onNotificationTap?.call(chatId, senderId);
     }
   }
 

@@ -143,22 +143,14 @@ class _FruitListPageState extends State<FruitListPage> {
 
   /// Builds app bar with title and add button
   PreferredSizeWidget _buildAppBar() {
-    return PreferredSize(
-      preferredSize: const Size.fromHeight(kToolbarHeight + 3),
-      child: Container(
-        color: Colors.green[800],
-        child: Column(
-          children: [
-            AppBar(
-              elevation: 0,
-              backgroundColor: Colors.transparent,
+    return AppBar(
+              
               title: const Row(
                 children: [
                   SizedBox(width: 30),
                   Text(
                     'Voćne vrste',
-                    style: TextStyle(color: Colors.white),
-                  ),
+                                      ),
                 ],
               ),
               actions: [
@@ -174,15 +166,11 @@ class _FruitListPageState extends State<FruitListPage> {
                   },
                 ),
               ],
-            ),
-            Container(
-              height: 3,
-              color: Colors.brown[500],
-            ),
-          ],
-        ),
-      ),
-    );
+              bottom: const PreferredSize(
+                preferredSize: Size.fromHeight(2),
+                child: ColoredBox(color: Color(0xFF2E7D52), child: SizedBox(height: 2, width: double.infinity)),
+              ),
+            );
   }
 
   /// Builds main body with search field and fruit list
@@ -204,13 +192,13 @@ class _FruitListPageState extends State<FruitListPage> {
         onChanged: _filterFruitTypes,
         decoration: InputDecoration(
           labelText: "Pretraži voćne vrste",
-          labelStyle: TextStyle(color: Colors.green[800]),
-          prefixIcon: Icon(Icons.search, color: Colors.green[800]),
+          labelStyle: TextStyle(color: const Color(0xFF388E3C)),
+          prefixIcon: Icon(Icons.search, color: const Color(0xFF388E3C)),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
           ),
           floatingLabelStyle: TextStyle(
-            color: Colors.brown[500],
+            color: const Color(0xFF1A7A30),
             fontWeight: FontWeight.bold,
           ),
           enabledBorder: OutlineInputBorder(
@@ -223,7 +211,7 @@ class _FruitListPageState extends State<FruitListPage> {
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(
-              color: Colors.brown[500]!,
+              color: const Color(0xFF1A7A30),
               width: 2,
             ),
           ),
@@ -355,44 +343,36 @@ class _FruitListPageState extends State<FruitListPage> {
 
   /// Builds bottom navigation bar
   Widget _buildBottomNavigationBar() {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(
-            color: Colors.brown[500] ?? Colors.orange,
-            width: 1.0,
-          ),
+    return BottomNavigationBar(
+      currentIndex: 2,
+      backgroundColor: Colors.white,
+      selectedItemColor: const Color(0xFF388E3C),
+      unselectedItemColor: Colors.grey[400],
+      elevation: 8,
+      onTap: _onItemTapped,
+      type: BottomNavigationBarType.fixed,
+      items: const [
+        BottomNavigationBarItem(
+          icon: Icon(Icons.chat),
+          label: 'Poruke',
         ),
-      ),
-      child: BottomNavigationBar(
-        currentIndex: 2,
-        selectedItemColor: Colors.brown[500],
-        unselectedItemColor: Colors.grey,
-        onTap: _onItemTapped,
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat),
-            label: 'Poruke',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.people),
-            label: 'Korisnici',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.forest),
-            label: 'Voćne vrste',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.tv),
-            label: 'Reklame',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_2_sharp),
-            label: 'Profil',
-          ),
-        ],
-      ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.people),
+          label: 'Korisnici',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.forest),
+          label: 'Voćne vrste',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.tv),
+          label: 'Reklame',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.person_2_sharp),
+          label: 'Profil',
+        ),
+      ],
     );
   }
 }
@@ -425,7 +405,7 @@ class _FruitListItem extends StatelessWidget {
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: Colors.green[800] ?? Colors.orange,
+              color: const Color(0xFF388E3C),
               width: 2,
             ),
             boxShadow: [
@@ -445,7 +425,7 @@ class _FruitListItem extends StatelessWidget {
                     Text(
                       fruit.name,
                       style: TextStyle(
-                        color: Colors.green[800],
+                        color: const Color(0xFF388E3C),
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
@@ -462,7 +442,7 @@ class _FruitListItem extends StatelessWidget {
                 ),
               ),
               IconButton(
-                icon: Icon(Icons.edit, color: Colors.brown[500]),
+                icon: Icon(Icons.edit, color: const Color(0xFF1A7A30)),
                 onPressed: onEdit,
               ),
               IconButton(

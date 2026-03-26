@@ -7,9 +7,8 @@ import 'package:fruit_care_pro/shared_ui_components.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:fruit_care_pro/widgets/user_details_screen.dart';
-import 'package:fruit_care_pro/screens/admin_main_screen.dart';
 import 'package:fruit_care_pro/current_user_service.dart';
-import 'package:fruit_care_pro/screens/user_main_screen.dart';
+import 'package:provider/provider.dart';
 
 class UserListScreen extends StatefulWidget {
   const UserListScreen({super.key});
@@ -29,13 +28,14 @@ class _UserListScreenState extends State<UserListScreen> {
   final TextEditingController _searchController = TextEditingController();
 
   //Main service for searching users and execute actions
-  final UserService _userService = UserService();
+  late final UserService _userService;
 
   final user = CurrentUserService.instance.currentUser;
 
   @override
   void initState() {
     super.initState();
+    _userService = context.read<UserService>();
     _loadUsers();
     _searchController.addListener(_filterUsers);
   }
@@ -44,6 +44,7 @@ class _UserListScreenState extends State<UserListScreen> {
   void _loadUsers() async {
     List<AppUser>? dbUsers = await _userService.getAllUsers();
 
+    if (!mounted) return;
     setState(() {
       users = dbUsers;
       filteredUsers = dbUsers; // Initially, show all users
@@ -131,25 +132,11 @@ class _UserListScreenState extends State<UserListScreen> {
   }
 
   void _onItemTapped(int index) {
+    if (index == 1) return; // Already on this screen
+
     switch (index) {
       case 0:
-        if (user?.isAdmin ?? false) {
-          Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (context) => AdminMainScreen()));
-        } else {
-          Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (context) => UserMainScreen()));
-        }
-        break;
-      case 1:
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const UserListScreen()),
-        );
+        Navigator.pop(context);
         break;
       case 2:
         Navigator.push(
@@ -163,10 +150,10 @@ class _UserListScreenState extends State<UserListScreen> {
           MaterialPageRoute(builder: (context) => AdvertisementCategoriesScreen()),
         );
         break;
-       case 4:
+      case 4:
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => UserDetailsScreen(userId: user?.id))
+          MaterialPageRoute(builder: (context) => UserDetailsScreen(userId: user?.id)),
         );
         break;
     }
@@ -175,20 +162,12 @@ class _UserListScreenState extends State<UserListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: Size.fromHeight(kToolbarHeight + 3),
-        child: Container(
-          color: Colors.green[800],
-          child: Column(
-            children: [
-              AppBar(
-                elevation: 0,
-                backgroundColor: Colors.transparent,
+      appBar: AppBar(
+                
                 centerTitle: true,
                 title: Text(
                   'Korisnici',
-                  style: TextStyle(color: Colors.white),
-                ),
+                                  ),
                 actions: [
                   IconButton(
                     icon: Icon(Icons.add, color: Colors.white),
@@ -198,15 +177,11 @@ class _UserListScreenState extends State<UserListScreen> {
                     },
                   ),
                 ],
+                bottom: const PreferredSize(
+                  preferredSize: Size.fromHeight(2),
+                  child: ColoredBox(color: Color(0xFF2E7D52), child: SizedBox(height: 2, width: double.infinity)),
+                ),
               ),
-              Container(
-                height: 3,
-                color: Colors.brown[500] ?? Colors.brown,
-              ),
-            ],
-          ),
-        ),
-      ),
       body: Column(
         children: [
           Padding(
@@ -221,7 +196,7 @@ class _UserListScreenState extends State<UserListScreen> {
                   color: Colors.grey, // boja kada nije fokus
                 ),
                 floatingLabelStyle: TextStyle(
-                  color: Colors.brown[500], // boja kada je fokus
+                  color: const Color(0xFF1A7A30), // boja kada je fokus
                   fontWeight: FontWeight.bold,
                 ),
                 enabledBorder: OutlineInputBorder(
@@ -234,7 +209,7 @@ class _UserListScreenState extends State<UserListScreen> {
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(
-                    color: Colors.brown[500]!, // boja kada je fokus
+                    color: const Color(0xFF1A7A30), // boja kada je fokus
                     width: 2,
                   ),
                 ),
@@ -255,7 +230,7 @@ class _UserListScreenState extends State<UserListScreen> {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: Colors.brown[300] ?? Colors.brown,
+                        color: const Color(0xFF66BB6A),
                         width: 2,
                       ),
                     ),
@@ -292,7 +267,7 @@ class _UserListScreenState extends State<UserListScreen> {
                         child: Icon(
                           Icons.star,
                           color: user.isPremium
-                              ? Colors.brown[500] ?? Colors.brown
+                              ? const Color(0xFF1A7A30)
                               : Colors.grey[400],
                           size: 24,
                         ),
@@ -308,9 +283,9 @@ class _UserListScreenState extends State<UserListScreen> {
                         deactivateUser(user);
                       }
                     },
-                    activeThumbColor: Colors.brown[500], // kružić kada je uključen
+                    activeThumbColor: const Color(0xFF1A7A30), // kružić kada je uključen
                     inactiveThumbColor:
-                        Colors.brown[500], // kružić kada je isključen
+                        const Color(0xFF1A7A30), // kružić kada je isključen
                     activeTrackColor:
                         Colors.grey[300], // track kada je uključen
                     inactiveTrackColor: Colors.grey[300],
@@ -331,41 +306,36 @@ class _UserListScreenState extends State<UserListScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          border: Border(
-            top: BorderSide(color: Colors.brown[500] ?? Colors.brown, width: 2),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: 1,
+        backgroundColor: Colors.white,
+        selectedItemColor: const Color(0xFF388E3C),
+        unselectedItemColor: Colors.grey[400],
+        elevation: 8,
+        onTap: _onItemTapped,
+        type: BottomNavigationBarType.fixed,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.chat),
+            label: 'Poruke',
           ),
-        ),
-        child: BottomNavigationBar(
-          currentIndex: 1,
-          selectedItemColor: Colors.brown[500],
-          unselectedItemColor: Colors.grey,
-          onTap: _onItemTapped,
-          type: BottomNavigationBarType.fixed,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.chat),
-              label: 'Poruke',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.people),
-              label: 'Korisnici',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.forest),
-              label: 'Voćne vrste',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.tv),
-              label: 'Reklame',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person_2_sharp),
-              label: 'Profil',
-            ),
-          ],
-        ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.people),
+            label: 'Korisnici',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.forest),
+            label: 'Voćne vrste',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.tv),
+            label: 'Reklame',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_2_sharp),
+            label: 'Profil',
+          ),
+        ],
       ),
     );
   }

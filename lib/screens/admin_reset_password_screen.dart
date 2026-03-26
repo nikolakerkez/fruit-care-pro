@@ -71,7 +71,7 @@ class _AdminResetPasswordScreenState extends State<AdminResetPasswordScreen> {
                   Navigator.of(context).pop(); // Vrati se nazad
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green[800],
+                  backgroundColor: const Color(0xFF388E3C),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -106,7 +106,7 @@ class _AdminResetPasswordScreenState extends State<AdminResetPasswordScreen> {
               ElevatedButton(
                 onPressed: () => Navigator.of(context).pop(),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green[800],
+                  backgroundColor: const Color(0xFF388E3C),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -127,25 +127,12 @@ class _AdminResetPasswordScreenState extends State<AdminResetPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(kToolbarHeight + 3),
-        child: Container(
-          color: Colors.green[800],
-          child: Column(
-            children: [
-              AppBar(
-                elevation: 0,
-                backgroundColor: Colors.transparent,
+      appBar: AppBar(
+                
                 title: const Text(
                   'Resetuj lozinku',
-                  style: TextStyle(color: Colors.white),
-                ),
+                                  ),
               ),
-              Container(height: 3, color: Colors.brown[500]),
-            ],
-          ),
-        ),
-      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Form(
@@ -250,7 +237,7 @@ class _AdminResetPasswordScreenState extends State<AdminResetPasswordScreen> {
               //   child: ElevatedButton(
               //     onPressed: _isLoading ? null : _resetPassword,
               //     style: ElevatedButton.styleFrom(
-              //       backgroundColor: Colors.green[800],
+              //       backgroundColor: const Color(0xFF388E3C),
               //       shape: RoundedRectangleBorder(
               //         borderRadius: BorderRadius.circular(8),
               //       ),

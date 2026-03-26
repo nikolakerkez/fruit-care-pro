@@ -331,19 +331,11 @@ Future<void> _deleteAdvertisement(Advertisement ad) async {
     ];
 
     return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: Size.fromHeight(kToolbarHeight + 3),
-        child: Container(
-          color: Colors.green[800],
-          child: Column(
-            children: [
-              AppBar(
-                elevation: 0,
-                backgroundColor: Colors.transparent,
+      appBar: AppBar(
+                
                 title: Text(
                   category!.name,
-                  style: TextStyle(color: Colors.white),
-                ),
+                                  ),
                 actions: [
                   if (isAdmin)
                     IconButton(
@@ -373,14 +365,6 @@ Future<void> _deleteAdvertisement(Advertisement ad) async {
                     ),
                 ],
               ),
-              Container(
-                height: 3,
-                color: Colors.brown[500],
-              ),
-            ],
-          ),
-        ),
-      ),
       body: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -504,7 +488,7 @@ Future<void> _deleteAdvertisement(Advertisement ad) async {
                 height: 8,
                 decoration: BoxDecoration(
                   color: _currentPage == index
-                      ? Colors.green[800]
+                      ? const Color(0xFF388E3C)
                       : Colors.grey[400],
                   borderRadius: BorderRadius.circular(4),
                 ),
@@ -513,22 +497,15 @@ Future<void> _deleteAdvertisement(Advertisement ad) async {
           ),
         ],
       ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          border: Border(
-            top: BorderSide(
-              color: Colors.brown[500] ?? Colors.brown,
-              width: 1.0,
-            ),
-          ),
-        ),
-        child: BottomNavigationBar(
-            currentIndex: isAdmin ? 3 : 1,
-            selectedItemColor: Colors.brown[500],
-            unselectedItemColor: Colors.grey,
-            onTap: _onItemTapped,
-            type: BottomNavigationBarType.fixed,
-            items: bottomNavItems),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: isAdmin ? 3 : 1,
+        backgroundColor: Colors.white,
+        selectedItemColor: const Color(0xFF388E3C),
+        unselectedItemColor: Colors.grey[400],
+        elevation: 8,
+        onTap: _onItemTapped,
+        type: BottomNavigationBarType.fixed,
+        items: bottomNavItems,
       ),
     );
   }

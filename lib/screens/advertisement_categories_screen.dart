@@ -211,22 +211,14 @@ class _AdvertisementCategoriesState
 
   /// Builds app bar with title and add button
   PreferredSizeWidget _buildAppBar() {
-    return PreferredSize(
-      preferredSize: const Size.fromHeight(kToolbarHeight + 3),
-      child: Container(
-        color: Colors.green[800],
-        child: Column(
-          children: [
-            AppBar(
-              elevation: 0,
-              backgroundColor: Colors.transparent,
+    return AppBar(
+              
               title: const Row(
                 children: [
                   SizedBox(width: 30),
                   Text(
                     'Kategorije',
-                    style: TextStyle(color: Colors.white),
-                  ),
+                                      ),
                 ],
               ),
               actions: [
@@ -236,15 +228,11 @@ class _AdvertisementCategoriesState
                     onPressed: () => _navigateToAddEditCategory(),
                   ),
               ],
-            ),
-            Container(
-              height: 3,
-              color: Colors.brown[500],
-            ),
-          ],
-        ),
-      ),
-    );
+              bottom: const PreferredSize(
+                preferredSize: Size.fromHeight(2),
+                child: ColoredBox(color: Color(0xFF2E7D52), child: SizedBox(height: 2, width: double.infinity)),
+              ),
+            );
   }
 
   /// Builds main body with search field and categories list
@@ -266,13 +254,13 @@ class _AdvertisementCategoriesState
         onChanged: _filterCategories,
         decoration: InputDecoration(
           labelText: "Pretraži kategorije",
-          labelStyle: TextStyle(color: Colors.green[800]),
-          prefixIcon: Icon(Icons.search, color: Colors.green[800]),
+          labelStyle: TextStyle(color: const Color(0xFF388E3C)),
+          prefixIcon: Icon(Icons.search, color: const Color(0xFF388E3C)),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
           ),
           floatingLabelStyle: TextStyle(
-            color: Colors.brown[500],
+            color: const Color(0xFF1A7A30),
             fontWeight: FontWeight.bold,
           ),
           enabledBorder: OutlineInputBorder(
@@ -285,7 +273,7 @@ class _AdvertisementCategoriesState
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(
-              color: Colors.brown[500]!,
+              color: const Color(0xFF1A7A30),
               width: 2,
             ),
           ),
@@ -411,23 +399,15 @@ class _AdvertisementCategoriesState
   Widget _buildBottomNavigationBar() {
     final bottomNavItems = _buildBottomNavItems();
 
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(
-            color: Colors.brown[500] ?? Colors.orange,
-            width: 1.0,
-          ),
-        ),
-      ),
-      child: BottomNavigationBar(
-        currentIndex: _isAdmin ? 3 : 1,
-        selectedItemColor: Colors.brown[500],
-        unselectedItemColor: Colors.grey,
-        onTap: _onItemTapped,
-        type: BottomNavigationBarType.fixed,
-        items: bottomNavItems,
-      ),
+    return BottomNavigationBar(
+      currentIndex: _isAdmin ? 3 : 1,
+      backgroundColor: Colors.white,
+      selectedItemColor: const Color(0xFF388E3C),
+      unselectedItemColor: Colors.grey[400],
+      elevation: 8,
+      onTap: _onItemTapped,
+      type: BottomNavigationBarType.fixed,
+      items: bottomNavItems,
     );
   }
 
@@ -501,7 +481,7 @@ class _CategoryListItem extends StatelessWidget {
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: Colors.green[800] ?? Colors.orange,
+                color: const Color(0xFF388E3C),
                 width: 2,
               ),
               boxShadow: [
@@ -521,7 +501,7 @@ class _CategoryListItem extends StatelessWidget {
                       Text(
                         category.name,
                         style: TextStyle(
-                          color: Colors.green[800],
+                          color: const Color(0xFF388E3C),
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
@@ -533,7 +513,7 @@ class _CategoryListItem extends StatelessWidget {
                 // Edit and Delete buttons - only for admins
                 if (isAdmin) ...[
                   IconButton(
-                    icon: Icon(Icons.edit, color: Colors.brown[500]),
+                    icon: Icon(Icons.edit, color: const Color(0xFF1A7A30)),
                     onPressed: onEdit,
                   ),
                   IconButton(

@@ -190,29 +190,13 @@ class _AddUpdateCategoryState extends State<AddUpdateCategory> {
 
   /// Builds app bar with title
   PreferredSizeWidget _buildAppBar() {
-    return PreferredSize(
-      preferredSize: const Size.fromHeight(kToolbarHeight + 3),
-      child: Container(
-        color: Colors.green[800],
-        child: Column(
-          children: [
-            AppBar(
-              elevation: 0,
-              backgroundColor: Colors.transparent,
+    return AppBar(
+              
               centerTitle: true,
               title: Text(
                 _title,
-                style: const TextStyle(color: Colors.white),
-              ),
-            ),
-            Container(
-              height: 3,
-              color: Colors.brown[500],
-            ),
-          ],
-        ),
-      ),
-    );
+                              ),
+            );
   }
 
   /// Builds main body content
@@ -280,7 +264,7 @@ class _AddUpdateCategoryState extends State<AddUpdateCategory> {
       decoration: InputDecoration(
         labelText: 'Naziv kategorije',
         hintText: 'Unesite naziv',
-        labelStyle: TextStyle(color: Colors.green[800]),
+        labelStyle: TextStyle(color: const Color(0xFF388E3C)),
         filled: true,
         fillColor: Colors.white,
         border: OutlineInputBorder(

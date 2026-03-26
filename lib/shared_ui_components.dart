@@ -18,18 +18,18 @@ import 'package:flutter/material.dart';
 //     decoration: InputDecoration(
 //       labelText: labelText,
 //       labelStyle: TextStyle(
-//         color: Colors.green[800],
+//         color: const Color(0xFF388E3C),
 //         fontSize: 14.0,
 //       ),
 //       border: OutlineInputBorder(
 //         borderRadius: BorderRadius.circular(8),
-//         borderSide: BorderSide(color: Colors.green[800]!, width: 1),
+//         borderSide: BorderSide(color: const Color(0xFF388E3C), width: 1),
 //       ),
 //         focusedBorder: OutlineInputBorder(
-//         borderSide: BorderSide(color: Colors.green[800]!, width: 1),
+//         borderSide: BorderSide(color: const Color(0xFF388E3C), width: 1),
 //         borderRadius: BorderRadius.circular(8.0),
 //         ),
-//       prefixIcon: iconData != null ? Icon(iconData, color: Colors.green[800]) : null,
+//       prefixIcon: iconData != null ? Icon(iconData, color: const Color(0xFF388E3C)) : null,
 //       //contentPadding: EdgeInsets.all(1),
 //       isDense: true
 //     ),
@@ -86,34 +86,32 @@ Widget generateTextField({
     },
     decoration: InputDecoration(
       labelText: labelText,
-      labelStyle: TextStyle(
-        color: Colors.green[800],
-        fontSize: 14.0,
-      ),
+      labelStyle: const TextStyle(color: Color(0xFF6B7280), fontSize: 14.0),
+      filled: true,
+      fillColor: enabled ? const Color(0xFFF5F7F5) : const Color(0xFFEEEEEE),
       enabledBorder: OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.green[800]!, width: 1),
-        borderRadius: BorderRadius.circular(8.0),
+        borderSide: const BorderSide(color: Color(0xFFDDE5DE), width: 1),
+        borderRadius: BorderRadius.circular(10.0),
       ),
       focusedBorder: OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.green[800]!, width: 1),
-        borderRadius: BorderRadius.circular(8.0),
+        borderSide: const BorderSide(color: Color(0xFF388E3C), width: 1.5),
+        borderRadius: BorderRadius.circular(10.0),
       ),
       errorBorder: OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.red, width: 1),
-        borderRadius: BorderRadius.circular(8.0),
+        borderSide: const BorderSide(color: Colors.red, width: 1),
+        borderRadius: BorderRadius.circular(10.0),
       ),
       focusedErrorBorder: OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.green[800]!, width: 1),
-        borderRadius: BorderRadius.circular(8.0),
+        borderSide: const BorderSide(color: Color(0xFF388E3C), width: 1.5),
+        borderRadius: BorderRadius.circular(10.0),
       ),
-      prefixIcon:
-          iconData != null ? Icon(iconData, color: Colors.green[800]) : null,
-      suffixIcon:
-          sufixIconWidget,
-      contentPadding: EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-      // isDense: true, // -> ukloniti ili postaviti na false
+      prefixIcon: iconData != null
+          ? Icon(iconData, color: const Color(0xFF6B7280), size: 20)
+          : null,
+      suffixIcon: sufixIconWidget,
+      contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
     ),
-    style: TextStyle(fontSize: 14.0, color: Colors.black),
+    style: const TextStyle(fontSize: 14.0, color: Color(0xFF111827)),
   );
 
   if (width != null) {
@@ -140,32 +138,37 @@ SizedBox generateButton(
     double minimumHeight = 30.0,
     double height = 50,
     double width = double.infinity}) {
-  final Color finalBackgroundColor = backgroundColor ?? Colors.green[800]!;
-  final Color finalBorderColor = borderColor ?? Colors.brown[500]!;
+  final Color finalBackgroundColor = backgroundColor ?? const Color(0xFF388E3C);
 
   return SizedBox(
-      height: height,
-      width: width,
-      child: ElevatedButton.icon(
-        onPressed: onPressed,
-        icon: icon != null
-            ? Icon(icon, color: textColor)
-            : Container(), // Ako postoji ikona
-        label: Text(
-          text,
-          style: TextStyle(color: textColor, fontSize: fontSize),
+    height: height,
+    width: width,
+    child: ElevatedButton.icon(
+      onPressed: onPressed,
+      icon: icon != null ? Icon(icon, color: textColor, size: 18) : const SizedBox.shrink(),
+      label: Text(
+        text,
+        style: TextStyle(
+          color: textColor,
+          fontSize: fontSize,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.4,
         ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: finalBackgroundColor,
-          padding: EdgeInsets.symmetric(
-              vertical: paddingVertical, horizontal: paddingHorizontal),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(borderRadius),
-            side: BorderSide(color: finalBorderColor, width: 1),
-          ),
-          minimumSize: Size(double.infinity, minimumHeight),
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: finalBackgroundColor,
+        foregroundColor: textColor,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        padding: EdgeInsets.symmetric(
+            vertical: paddingVertical, horizontal: paddingHorizontal),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(borderRadius),
         ),
-      ));
+        minimumSize: Size(double.infinity, minimumHeight),
+      ),
+    ),
+  );
 }
 
 void showErrorDialog(BuildContext context, String message, {int seconds = 3}) {

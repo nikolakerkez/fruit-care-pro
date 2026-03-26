@@ -167,23 +167,11 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: Size.fromHeight(kToolbarHeight + 3),
-        child: Container(
-          color: Colors.green[800],
-          child: Column(
-            children: [
-              AppBar(
-                elevation: 0,
-                backgroundColor: Colors.transparent,
+      appBar: AppBar(
+                
                 title: Text('Dodavanje novog korisnika',
                     style: TextStyle(color: Colors.white)),
               ),
-              Container(height: 3, color: Colors.brown[500])
-            ],
-          ),
-        ),
-      ),
       body: SingleChildScrollView(
         child: Form(
           key: _formKey,
@@ -270,7 +258,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           focusedBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.green[800]!),
+                            borderSide: BorderSide(color: const Color(0xFF388E3C)),
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
@@ -308,7 +296,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                   Container(
                     height: 50, // da dugme bude iste visine ako želiš
                     decoration: BoxDecoration(
-                      color: Colors.green[800],
+                      color: const Color(0xFF388E3C),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: IconButton(
@@ -354,7 +342,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                         color: isEven ? Colors.grey[100] : Colors.white,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: Colors.green[800]!,
+                          color: const Color(0xFF388E3C),
                           width: 1,
                         ),
                         boxShadow: [
@@ -381,7 +369,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                           "Broj stabala: ${fruit.numberOfTrees}",
                           style: TextStyle(
                             fontSize: 13,
-                            color: Colors.green[800],
+                            color: const Color(0xFF388E3C),
                             fontWeight: FontWeight.w500,
                           ),
                         ),

@@ -29,7 +29,7 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
   late final UserService _userService;
   late final ChatService _chatService;
   // State
-  late final AppUser _adminUser;
+  AppUser? _adminUser;
   Map<String, AppUser> _usersMap = {};
   bool _isLoadingUsers = true;
   String? _errorMessage;
@@ -145,7 +145,7 @@ Future<void> _loadUsers() async {
       const UserListScreen(), // Index 1
       const FruitListPage(), // Index 2
       const AdvertisementCategoriesScreen(), // Index 3
-      UserDetailsScreen(userId: _adminUser.id), // Index 4
+      UserDetailsScreen(userId: _adminUser?.id), // Index 4
     ];
 
     if (index < routes.length) {
@@ -171,7 +171,7 @@ Future<void> _loadUsers() async {
       );
     } else {
       // Navigate to private chat
-      final otherUserId = chat.getOtherUser(_adminUser.id);
+      final otherUserId = chat.getOtherUser(_adminUser?.id ?? '');
 
       if (otherUserId == null || otherUserId.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -198,6 +198,7 @@ Future<void> _loadUsers() async {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F7F5),
       appBar: _buildAppBar(),
       body: _buildBody(),
       bottomNavigationBar: _buildBottomNavigationBar(),
@@ -206,28 +207,13 @@ Future<void> _loadUsers() async {
 
   /// Builds app bar with title
   PreferredSizeWidget _buildAppBar() {
-    return PreferredSize(
-      preferredSize: const Size.fromHeight(kToolbarHeight + 3),
-      child: Container(
-        color: Colors.green[800],
-        child: Column(
-          children: [
-            AppBar(
-              elevation: 0,
-              centerTitle: true,
-              backgroundColor: Colors.transparent,
-              automaticallyImplyLeading: false, // Remove back button
-              title: const Text(
-                'Poruke',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-            Container(
-              height: 3,
-              color: Colors.brown[500],
-            ),
-          ],
-        ),
+    return AppBar(
+      centerTitle: true,
+      automaticallyImplyLeading: false,
+      title: const Text('Poruke'),
+      bottom: const PreferredSize(
+        preferredSize: Size.fromHeight(2),
+        child: ColoredBox(color: Color(0xFF2E7D52), child: SizedBox(height: 2, width: double.infinity)),
       ),
     );
   }
@@ -254,7 +240,7 @@ Future<void> _loadUsers() async {
     }
 
     return StreamBuilder<List<ChatItem>>(
-      stream: _chatService.getChatsStreamForUser(_adminUser.id),
+      stream: _adminUser != null ? _chatService.getChatsStreamForUser(_adminUser!.id) : const Stream.empty(),
       builder: (context, snapshot) {
         // Loading state
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -302,7 +288,7 @@ Future<void> _loadUsers() async {
                 Text(
                   'Nema poruka',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 16,
                     color: Colors.grey[600],
                   ),
                 ),
@@ -315,21 +301,26 @@ Future<void> _loadUsers() async {
         final chats = snapshot.data!;
 
         return RefreshIndicator(
+          color: const Color(0xFF388E3C),
           onRefresh: _loadUsers,
-          child: ListView.separated(
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             itemCount: chats.length,
-            separatorBuilder: (_, __) => const Divider(
-              color: Colors.grey,
-              thickness: 1,
-              height: 12,
-            ),
             itemBuilder: (context, index) {
               final chat = chats[index];
-              return _ChatListTile(
-                chat: chat,
-                adminId: _adminUser.id,
-                usersMap: _usersMap,
-                onTap: () => _handleChatTap(chat),
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                elevation: 0,
+                color: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: _ChatListTile(
+                  chat: chat,
+                  adminId: _adminUser?.id ?? '',
+                  usersMap: _usersMap,
+                  onTap: () => _handleChatTap(chat),
+                ),
               );
             },
           ),
@@ -340,44 +331,36 @@ Future<void> _loadUsers() async {
 
   /// Builds bottom navigation bar
   Widget _buildBottomNavigationBar() {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(
-            color: Colors.brown[500] ?? Colors.brown,
-            width: 2,
-          ),
+    return BottomNavigationBar(
+      currentIndex: 0,
+      backgroundColor: Colors.white,
+      selectedItemColor: const Color(0xFF388E3C),
+      unselectedItemColor: Colors.grey[400],
+      elevation: 8,
+      type: BottomNavigationBarType.fixed,
+      onTap: _onItemTapped,
+      items: const [
+        BottomNavigationBarItem(
+          icon: Icon(Icons.chat),
+          label: 'Poruke',
         ),
-      ),
-      child: BottomNavigationBar(
-        currentIndex: 0,
-        selectedItemColor: Colors.brown[500],
-        unselectedItemColor: Colors.grey,
-        type: BottomNavigationBarType.fixed,
-        onTap: _onItemTapped,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat),
-            label: 'Poruke',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.people),
-            label: 'Korisnici',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.forest),
-            label: 'Voćne vrste',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.tv),
-            label: 'Reklame',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: 'Profil',
-          ),
-        ],
-      ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.people),
+          label: 'Korisnici',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.forest),
+          label: 'Voćne vrste',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.tv),
+          label: 'Reklame',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.person),
+          label: 'Profil',
+        ),
+      ],
     );
   }
 }
@@ -414,16 +397,16 @@ class _ChatListTile extends StatelessWidget {
         chatTitle,
         style: TextStyle(
           fontWeight: hasUnread ? FontWeight.bold : FontWeight.normal,
-          fontSize: 16.5,
+          fontSize: 15,
         ),
       ),
       subtitle: _buildSubtitle(lastMessage, hasUnread),
       trailing: hasUnread
           ? Container(
-              width: 12,
-              height: 12,
+              width: 10,
+              height: 10,
               decoration: const BoxDecoration(
-                color: Colors.blue,
+                color: Color(0xFF388E3C),
                 shape: BoxShape.circle,
               ),
             )
@@ -449,14 +432,11 @@ class _ChatListTile extends StatelessWidget {
   /// Builds avatar (profile picture or group icon)
   Widget _buildAvatar(String? thumbUrl) {
     return Container(
-      width: 60,
-      height: 60,
+      width: 48,
+      height: 48,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(
-          color: Colors.brown[300] ?? Colors.brown,
-          width: 2,
-        ),
+        color: const Color(0xFFE8F5E9),
       ),
       child: ClipOval(
         child: AspectRatio(

@@ -4,10 +4,13 @@ import 'package:fruit_care_pro/screens/change_password_screen.dart';
 import 'package:fruit_care_pro/screens/change_user_data_screen.dart';
 import 'package:fruit_care_pro/screens/message_info.dart';
 import 'package:fruit_care_pro/screens/group_chat_screen.dart';
+import 'package:fruit_care_pro/screens/private_chat_screen.dart';
+import 'package:fruit_care_pro/current_user_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 import 'package:fruit_care_pro/screens/login_screen.dart';
+import 'package:fruit_care_pro/screens/splash_screen.dart';
 import 'package:fruit_care_pro/screens/admin_main_screen.dart';
 import 'package:fruit_care_pro/screens/user_main_screen.dart';
 import 'package:fruit_care_pro/models/user.dart';
@@ -25,8 +28,6 @@ void main() async {
   // Initialize Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  await Future.delayed(Duration(milliseconds: 500));
-  
   // Omogući Crashlytics slanje podataka
   await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(true);
 
@@ -75,30 +76,85 @@ class _MyAppState extends State<MyApp> {
     super.initState();
     
     // Setup callback za notification tap
-    NotificationService.onNotificationTap = (chatId) {
-      debugPrint('🔔 Navigating to chat: $chatId');
-      
-      // Navigiraj do group chat screen-a
-      // Pretpostavljam da trebaš chatId, možeš dodati ostale argumente ako treba
-      navigatorKey.currentState?.pushNamed(
-        '/group-chat',
-        arguments: {
-          'chatId': chatId,
-          // Dodaj ostale argumente ako su potrebni
-          // 'fruitTypeId': ...,
-          // 'fruitTypeName': ...,
-        },
-      );
+    NotificationService.onNotificationTap = (chatId, senderId) {
+      debugPrint('🔔 Navigating to chat: $chatId, senderId: $senderId');
+
+      if (chatId.startsWith('chat_')) {
+        // Privatni chat
+        final currentUser = CurrentUserService.instance.currentUser;
+        final role = currentUser?.isAdmin == true
+            ? ChatUserRole.admin
+            : ChatUserRole.user;
+
+        navigatorKey.currentState?.push(
+          MaterialPageRoute(
+            builder: (_) => PrivateChatScreen(
+              chatId: chatId,
+              userId: senderId,
+              role: role,
+            ),
+          ),
+        );
+      } else {
+        // Grupni chat
+        navigatorKey.currentState?.pushNamed(
+          '/group-chat',
+          arguments: {'chatId': chatId},
+        );
+      }
     };
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      navigatorKey: navigatorKey, // Dodaj navigatorKey
+      navigatorKey: navigatorKey,
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        scaffoldBackgroundColor: const Color(0xFFF5F7F5),
+        appBarTheme: AppBarTheme(
+          backgroundColor: const Color(0xFF1B3A2D),
+          foregroundColor: Colors.white,
+          elevation: 2,
+          shadowColor: const Color(0xFF2E7D52).withValues(alpha: 0.6),
+          centerTitle: true,
+          titleTextStyle: const TextStyle(
+            color: Colors.white,
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.5,
+          ),
+          iconTheme: const IconThemeData(color: Colors.white, size: 20),
+          actionsIconTheme: const IconThemeData(color: Colors.white, size: 20),
+        ),
+        bottomNavigationBarTheme: BottomNavigationBarThemeData(
+          backgroundColor: Colors.white,
+          selectedItemColor: const Color(0xFF388E3C),
+          unselectedItemColor: Colors.grey[400],
+          elevation: 8,
+          type: BottomNavigationBarType.fixed,
+        ),
+        cardTheme: CardThemeData(
+          color: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        dividerTheme: const DividerThemeData(
+          color: Color(0xFFEEEEEE),
+          thickness: 1,
+          space: 0,
+        ),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF388E3C),
+          brightness: Brightness.light,
+        ),
+        useMaterial3: false,
+      ),
       initialRoute: '/',
       routes: {
-        '/': (context) => LoginScreen(),
+        '/': (context) => const SplashScreen(),
         '/login': (context) => LoginScreen(),
         '/admin': (context) => AdminMainScreen(),
         '/user': (context) => UserMainScreen(),

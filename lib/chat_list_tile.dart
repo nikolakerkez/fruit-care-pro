@@ -36,7 +36,7 @@ class ChatListTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.green[800] ?? Colors.orange, width: 2),
+          border: Border.all(color: const Color(0xFF388E3C), width: 2),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.05),
@@ -56,7 +56,7 @@ class ChatListTile extends StatelessWidget {
                   Text(
                     title,
                     style: TextStyle(
-                      color: Colors.green[800],
+                      color: const Color(0xFF388E3C),
                       fontSize: 18,
                       fontWeight: isRead ? FontWeight.normal : FontWeight.bold,
                     ),
@@ -87,7 +87,7 @@ class ChatListTile extends StatelessWidget {
         height: 60,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          border: Border.all(color: Colors.brown[300] ?? Colors.brown, width: 2),
+          border: Border.all(color: const Color(0xFF66BB6A), width: 2),
         ),
         child: const Icon(Icons.groups, size: 30),
       );
@@ -97,7 +97,7 @@ class ChatListTile extends StatelessWidget {
         height: 60,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          border: Border.all(color: Colors.brown[300] ?? Colors.brown, width: 2),
+          border: Border.all(color: const Color(0xFF66BB6A), width: 2),
         ),
         child: ClipOval(
           child: otherUser?.thumbUrl != null

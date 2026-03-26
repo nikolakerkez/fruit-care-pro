@@ -91,8 +91,8 @@ class _MessageDetailsScreenState extends State<MessageDetailsScreen> {
     if (_isLoading) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Informacije o poruci', style: TextStyle(color: Colors.white, fontSize: 22)),
-          backgroundColor: Colors.green[800],
+          title: const Text('Informacije o poruci'),
+          
         ),
         body: const Center(child: CircularProgressIndicator()),
       );
@@ -101,8 +101,8 @@ class _MessageDetailsScreenState extends State<MessageDetailsScreen> {
     if (_messageData == null) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Informacije o poruci', style: TextStyle(color: Colors.white, fontSize: 22)),
-          backgroundColor: Colors.green[800],
+          title: const Text('Informacije o poruci'),
+          
         ),
         body: const Center(child: Text('Poruka nije pronađena')),
       );
@@ -110,8 +110,8 @@ class _MessageDetailsScreenState extends State<MessageDetailsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Informacije o poruci', style: TextStyle(color: Colors.white, fontSize: 22)),
-        backgroundColor: Colors.green[800],
+        title: const Text('Informacije o poruci'),
+        
       ),
       body: Column(
         children: [

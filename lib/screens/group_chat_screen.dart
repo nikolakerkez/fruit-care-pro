@@ -41,7 +41,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final StreamController<List<DocumentSnapshot>> _chatStreamController =
-      StreamController<List<DocumentSnapshot>>.broadcast();
+      StreamController<List<DocumentSnapshot>>();
 
   // State variables
   late final String _myId;
@@ -67,6 +67,14 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   void initState() {
     super.initState();
     _initializeScreen();
+    Future.delayed(const Duration(seconds: 15), () {
+      if (mounted && _isLoading) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Server ne odgovara. Pokušajte ponovo.';
+        });
+      }
+    });
   }
 
   @override
@@ -109,14 +117,20 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       // Extract route parameters
       await _extractRouteParameters();
 
-      // Load admin ID
-      await _loadAdminId();
+      // Load admin ID (with timeout to prevent hanging)
+      await _loadAdminId().timeout(
+        const Duration(seconds: 8),
+        onTimeout: () => throw Exception('Timeout pri učitavanju admin podataka'),
+      );
 
-      // Mark messages as read
-      await _markMessagesAsRead();
+      // Mark messages as read — non-critical, run in background
+      _markMessagesAsRead();
 
       // Setup scroll listener for pagination
       _setupScrollListener();
+
+      // Load initial messages
+      _loadMoreMessages();
 
       // Finalize initialization
       if (mounted) {
@@ -205,7 +219,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   /// Stream of chat messages with pagination
   Stream<List<DocumentSnapshot>> _listenToChatsRealTime() {
-    _loadMoreMessages();
     return _chatStreamController.stream;
   }
 
@@ -540,23 +553,31 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   /// Build app bar
   PreferredSizeWidget _buildAppBar() {
-    return PreferredSize(
-      preferredSize: const Size.fromHeight(kToolbarHeight + 3),
-      child: Container(
-        color: Colors.green[800],
-        child: Column(
-          children: [
-            AppBar(
-              elevation: 0,
-              centerTitle: true,
-              backgroundColor: Colors.transparent,
-              title: Text(
-                _fruitTypeName,
-                style: const TextStyle(color: Colors.white),
-              ),
+    return AppBar(
+      centerTitle: false,
+      title: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Color(0xFF2E7D52),
             ),
-            Container(height: 3, color: Colors.brown[500]),
-          ],
+            child: const Icon(Icons.groups, color: Colors.white, size: 20),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            _fruitTypeName,
+            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+      bottom: const PreferredSize(
+        preferredSize: Size.fromHeight(2),
+        child: ColoredBox(
+          color: Color(0xFF2E7D52),
+          child: SizedBox(height: 2, width: double.infinity),
         ),
       ),
     );
@@ -567,12 +588,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     return StreamBuilder<List<DocumentSnapshot>>(
       stream: _listenToChatsRealTime(),
       builder: (context, snapshot) {
-        // Loading state
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        // Empty state
+        // Empty state (also covers waiting - don't block UI on stream)
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return const Center(child: Text('Započnite razgovor.'));
         }
@@ -643,33 +659,38 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         date1.day == date2.day;
   }
 
+  Widget _buildInputButton(IconData icon, VoidCallback onPressed) {
+    return Container(
+      margin: const EdgeInsets.only(left: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF388E3C),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: IconButton(
+        icon: Icon(icon, color: Colors.white, size: 20),
+        onPressed: onPressed,
+      ),
+    );
+  }
+
   /// Build message input field (admin only)
   Widget _buildMessageInput() {
     return SafeArea(
       child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              Expanded(
-                child: generateTextField(
-                  labelText: 'Unesite poruku',
-                  controller: _messageController,
-                ),
+        color: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: generateTextField(
+                labelText: 'Unesite poruku',
+                controller: _messageController,
               ),
-              IconButton(
-                icon: const Icon(Icons.image),
-                color: Colors.brown[500],
-                onPressed: _sendImageMessage,
-              ),
-              IconButton(
-                icon: const Icon(Icons.send),
-                color: Colors.brown[500],
-                onPressed: _sendTextMessage,
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 4),
+            _buildInputButton(Icons.image_outlined, _sendImageMessage),
+            _buildInputButton(Icons.send_rounded, _sendTextMessage),
+          ],
         ),
       ),
     );
@@ -713,8 +734,18 @@ class _GroupChatBubble extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: isCurrentUser ? Colors.green[800] : Colors.brown[500],
+                  gradient: isCurrentUser
+                      ? const LinearGradient(
+                          colors: [Color(0xFF1B3A2D), Color(0xFF2E7D52)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        )
+                      : null,
+                  color: isCurrentUser ? null : Colors.white,
                   borderRadius: BorderRadius.circular(12),
+                  boxShadow: isCurrentUser
+                      ? null
+                      : [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 4, offset: const Offset(0, 1))],
                 ),
                 child: Column(
                   crossAxisAlignment: isCurrentUser
@@ -729,7 +760,10 @@ class _GroupChatBubble extends StatelessWidget {
                       if (hasImage) const SizedBox(height: 8),
                       Text(
                         messageData['message'],
-                        style: const TextStyle(color: Colors.white),
+                        style: TextStyle(
+                          color: isCurrentUser ? Colors.white : const Color(0xFF1A1A1A),
+                          fontSize: 15,
+                        ),
                       ),
                     ],
 
@@ -884,7 +918,7 @@ class _GroupChatBubble extends StatelessWidget {
         Text(
           formattedTime,
           style: TextStyle(
-            color: Colors.white.withOpacity(0.7),
+            color: isCurrentUser ? Colors.white.withValues(alpha: 0.7) : Colors.black45,
             fontSize: 11,
           ),
         ),

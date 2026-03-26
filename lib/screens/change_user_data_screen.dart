@@ -1,3 +1,4 @@
+import 'package:fruit_care_pro/current_user_service.dart';
 import 'package:fruit_care_pro/models/create_user.dart';
 import 'package:fruit_care_pro/models/fruit_type.dart';
 import 'package:fruit_care_pro/models/user.dart';
@@ -145,7 +146,7 @@ class ChangeUserDataScreenState extends State<ChangeUserDataScreen> {
           ),
         ],
       ),
-      backgroundColor: Colors.brown[500],
+      backgroundColor: const Color(0xFF1A7A30),
       behavior: SnackBarBehavior.floating,
       duration: const Duration(seconds: 2),
       shape: RoundedRectangleBorder(
@@ -156,25 +157,15 @@ class ChangeUserDataScreenState extends State<ChangeUserDataScreen> {
 }
   @override
   Widget build(BuildContext context) {
-    final canEdit = appUser.isAdmin;
+    final currentUser = CurrentUserService.instance.currentUser;
+
+    final canEdit =  currentUser?.isAdmin ?? false;
     return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: Size.fromHeight(kToolbarHeight + 3),
-        child: Container(
-          color: Colors.green[800],
-          child: Column(
-            children: [
-              AppBar(
-                elevation: 0,
-                backgroundColor: Colors.transparent,
+      appBar: AppBar(
+                
                 title: Text('Izmena podataka',
                     style: TextStyle(color: Colors.white)),
               ),
-              Container(height: 3, color: Colors.brown[500]),
-            ],
-          ),
-        ),
-      ),
       body: SingleChildScrollView(
         child: Form(
           key: _formKey,
@@ -276,7 +267,7 @@ class ChangeUserDataScreenState extends State<ChangeUserDataScreen> {
                                     ),
                                     focusedBorder: OutlineInputBorder(
                                       borderSide:
-                                          BorderSide(color: Colors.green[800]!),
+                                          BorderSide(color: const Color(0xFF388E3C)),
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                   ),
@@ -314,7 +305,7 @@ class ChangeUserDataScreenState extends State<ChangeUserDataScreen> {
                             Container(
                               height: 50,
                               decoration: BoxDecoration(
-                                color: Colors.green[800],
+                                color: const Color(0xFF388E3C),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: IconButton(
@@ -366,7 +357,7 @@ class ChangeUserDataScreenState extends State<ChangeUserDataScreen> {
                                       isEven ? Colors.grey[200] : Colors.white,
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: Colors.green[800] ?? Colors.brown,
+                                    color: const Color(0xFF388E3C),
                                     width: 1,
                                   ),
                                   boxShadow: [

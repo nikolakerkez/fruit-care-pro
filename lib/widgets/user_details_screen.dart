@@ -9,10 +9,7 @@ import 'package:fruit_care_pro/screens/fruit_types_screen.dart';
 import 'package:fruit_care_pro/screens/user_main_screen.dart';
 import 'package:fruit_care_pro/screens/users_screen.dart';
 import 'package:fruit_care_pro/shared_ui_components.dart';
-import 'package:fruit_care_pro/test_auth_manual.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:fruit_care_pro/models/user.dart';
 import 'package:fruit_care_pro/services/user_service.dart';
@@ -219,6 +216,8 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
     );
 
     try {
+      await _userService.logout();
+
       // Očisti CurrentUserService
       CurrentUserService.instance.clearUser();
 
@@ -230,7 +229,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
       // Navigate to login screen i obriši ceo stack
       if (context.mounted) {
         Navigator.of(context).pushNamedAndRemoveUntil(
-          '/', // Zameni sa tvojom login rutom
+          '/',
           (route) => false,
         );
       }
@@ -260,7 +259,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
               ElevatedButton(
                 onPressed: () => Navigator.of(context).pop(),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green[800],
+                  backgroundColor: const Color(0xFF388E3C),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -272,6 +271,57 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
         );
       }
     }
+  }
+
+  Widget _buildAvatarImage() {
+    if (_localProfileImage != null) {
+      return Image.file(_localProfileImage!,
+          width: 96, height: 96, fit: BoxFit.cover);
+    }
+    if (appUser.thumbUrl != null) {
+      return CachedNetworkImage(
+        imageUrl: appUser.thumbUrl!,
+        width: 96,
+        height: 96,
+        fit: BoxFit.cover,
+        placeholder: (_, __) =>
+            const Center(child: CircularProgressIndicator()),
+        errorWidget: (_, __, ___) =>
+            const Icon(Icons.person, size: 44, color: Colors.white70),
+      );
+    }
+    return const Icon(Icons.person, size: 44, color: Colors.white70);
+  }
+
+  Widget _statusBadge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+            color: color, fontSize: 12, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+
+  Widget _infoTile(IconData icon, String label, String value) {
+    return ListTile(
+      leading: Icon(icon, color: const Color(0xFF6B7280), size: 22),
+      title: Text(label,
+          style: const TextStyle(color: Color(0xFF6B7280), fontSize: 12)),
+      subtitle: Text(
+        value.isNotEmpty ? value : '—',
+        style: const TextStyle(
+            color: Color(0xFF111827),
+            fontSize: 15,
+            fontWeight: FontWeight.w500),
+      ),
+    );
   }
 
   @override
@@ -319,283 +369,197 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
       );
     }
     return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: Size.fromHeight(kToolbarHeight + 3),
-        child: Container(
-          color: Colors.green[800], // Boja pozadine AppBar-a
-          child: Column(
-            children: [
-              AppBar(
-                elevation: 0,
-                backgroundColor: Colors.transparent,
-                title: Text(
-                  'Korisnički panel',
-                  style: TextStyle(color: Colors.white),
+      appBar: AppBar(
+        title: const Text('Profil'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: _showLogoutDialog,
+          ),
+        ],
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(2),
+          child: ColoredBox(color: Color(0xFF2E7D52), child: SizedBox(height: 2, width: double.infinity)),
+        ),
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── Profile header (dark green banner) ──
+            Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF1B3A2D), Color(0xFF2E7D52)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-                actions: [
-                  IconButton(
-                    icon: const Icon(Icons.logout, color: Colors.white),
-                    onPressed: _showLogoutDialog, // 🔥 Poziv logout dialoga
+              ),
+              padding: const EdgeInsets.fromLTRB(16, 28, 16, 32),
+              child: Column(
+                children: [
+                  GestureDetector(
+                    onTap: _pickImage,
+                    child: Stack(
+                      children: [
+                        Container(
+                          width: 96,
+                          height: 96,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.4),
+                              width: 3,
+                            ),
+                          ),
+                          child: ClipOval(child: _buildAvatarImage()),
+                        ),
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(5),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF1B3A2D),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.camera_alt,
+                                color: Colors.white, size: 14),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    appUser.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _statusBadge(
+                        appUser.isActive ? 'Aktivan' : 'Neaktivan',
+                        appUser.isActive
+                            ? const Color(0xFF388E3C)
+                            : Colors.red[300]!,
+                      ),
+                      const SizedBox(width: 8),
+                      _statusBadge(
+                        appUser.isPremium ? 'Premium' : 'Standard',
+                        appUser.isPremium
+                            ? const Color(0xFFFFB300)
+                            : Colors.grey[400]!,
+                      ),
+                    ],
                   ),
                 ],
               ),
-              Container(
-                height: 3,
-                color: Colors.brown[500],
-              ),
-            ],
-          ),
-        ),
-      ),
-      body: Stack(
-        children: [
-          // Narandžasta pozadina sa borderom sa strane
-          Positioned.fill(
-            top: MediaQuery.of(context).size.height /
-                3, // Pozadina počinje od sredine ekrana
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.all(Radius.elliptical(200, 5)),
-                color: Colors.green[800] ?? Colors.brown, // Default fallback
-                border: Border(
-                  top: BorderSide(
-                      width: 3, color: Colors.green[800] ?? Colors.brown),
-                  left: BorderSide(
-                      width: 3, color: Colors.green[800] ?? Colors.brown),
-                  right: BorderSide(
-                      width: 3, color: Colors.green[800] ?? Colors.brown),
-                ),
-              ),
             ),
-          ),
-          SingleChildScrollView(
-            child: Column(
-              children: [
-                GestureDetector(
-                  onTap: () {
-                    // TODO: otvori full-screen prikaz slike
-                  },
-                  child: Container(
-                    margin:
-                        const EdgeInsets.only(top: 20), // pomeraj slike nadole
-                    alignment: Alignment.center,
-                    child: Container(
-                      padding: const EdgeInsets.all(3), // debljina border-a
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Colors.brown[300] ??
-                              Colors.brown, // boja border-a
-                          width: 2, // debljina border-a
-                        ),
-                      ),
-                      child: ClipOval(
-                        child: _localProfileImage != null
-                            ? Image.file(
-                                _localProfileImage!,
-                                width: 120,
-                                height: 120,
-                                fit: BoxFit.cover,
-                              )
-                            : appUser.thumbUrl != null
-                                ? CachedNetworkImage(
-                                    imageUrl: appUser.thumbUrl!,
-                                    width: 120,
-                                    height: 120,
-                                    fit: BoxFit.cover,
-                                    placeholder: (context, url) => Container(
-                                      width: 120,
-                                      height: 120,
-                                      color: Colors.grey[300],
-                                      child: Center(
-                                          child: CircularProgressIndicator()),
-                                    ),
-                                    errorWidget: (context, url, error) =>
-                                        Container(
-                                      width: 120,
-                                      height: 120,
-                                      color: Colors.grey[300],
-                                      child:
-                                          Icon(Icons.error, color: Colors.red),
-                                    ),
-                                  )
-                                : Container(
-                                    width: 120,
-                                    height: 120,
-                                    color: Colors.grey[300],
-                                    child: Icon(Icons.person,
-                                        size: 60, color: Colors.white),
-                                  ),
-                      ),
-                    ),
-                  ),
-                ),
-                SizedBox(height: 8),
-                TextButton.icon(
-                  onPressed: _pickImage, // klik za izbor nove slike
-                  icon: Icon(Icons.edit, size: 20, color: Colors.green[800]),
-                  label: Text(
-                    "Izmeni sliku",
-                    style: TextStyle(color: Colors.green[800], fontSize: 16),
-                  ),
-                ),
 
-                // Container sa osnovnim informacijama i dugmetom
-                Container(
-                  padding: EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.white, // Pozadina za osnovne informacije
-                    border: Border.all(
-                      color: Colors.brown[300] ??
-                          Colors.brown, // Narandžasta boja za border
-                      width: 3.1, // Debljina border-a
-                    ),
-                    borderRadius: BorderRadius.only(
-                      bottomLeft: Radius.circular(20),
-                      bottomRight: Radius.circular(20),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.grey.withOpacity(0.2),
-                        spreadRadius: 2,
-                        blurRadius: 5,
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      // Osnovne informacije korisnika
-                      Text(appUser.name,
-                          style: TextStyle(
-                              fontSize: 24, fontWeight: FontWeight.bold)),
-                      SizedBox(height: 8),
-                      Text(appUser.phone, style: TextStyle(fontSize: 16)),
-                      SizedBox(height: 8),
-                      Text(appUser.city, style: TextStyle(fontSize: 16)),
-                      SizedBox(height: 20),
-
-                      // Dugme za izmenu profila
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) =>
-                                    ChangeUserDataScreen(appUser: appUser)),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green[800],
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          minimumSize: Size(220, 45),
-                        ),
-                        child: Text(
-                          "Izmeni profil",
-                          style: TextStyle(color: Colors.white, fontSize: 18),
-                        ),
-                      ),
-                      if (currentUser.isAdmin) ...[
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) =>
-                                    AdminResetPasswordScreen(user: appUser)
-                          ));
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.brown[500],
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          minimumSize: Size(220, 45),
-                        ),
-                        child: Text(
-                          "Resetuj lozinku",
-                          style: TextStyle(color: Colors.white, fontSize: 18),
-                        ),
-                      ),
+            // ── Content ──
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Info card
+                  Card(
+                    child: Column(
+                      children: [
+                        _infoTile(
+                            Icons.phone_outlined, 'Telefon', appUser.phone),
+                        const Divider(indent: 56, height: 1),
+                        _infoTile(
+                            Icons.location_city_outlined, 'Grad', appUser.city),
                       ],
-                    ],
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 14),
 
-                SizedBox(height: 30),
-
-                Text("Vocne vrste",
-                    style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white)),
-
-                // Voćne vrste
-                Container(
-                  padding: EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      // Lista voćnih vrsta
-                      ListView.builder(
-                        shrinkWrap: true,
-                        physics: NeverScrollableScrollPhysics(),
-                        itemCount: appUser.fruitTypes.length,
-                        itemBuilder: (context, index) {
-                          final fruit = appUser.fruitTypes[index];
-                          return Container(
-                            padding: EdgeInsets.all(16),
-                            margin: EdgeInsets.symmetric(
-                                vertical: 8, horizontal: 16),
-                            decoration: BoxDecoration(
-                              color: Colors.brown[500],
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                  color: Colors.brown[300] ?? Colors.brown,
-                                  width: 2), // Fallback if null
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(fruit.fruitTypeName,
-                                    style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white)),
-                                Text("${fruit.numberOfTrees} stabala",
-                                    style: TextStyle(
-                                        fontSize: 16, color: Colors.white)),
-                              ],
-                            ),
-                          );
-                        },
+                  // Actions
+                  generateButton(
+                    text: 'Izmeni profil',
+                    icon: Icons.edit_outlined,
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) =>
+                              ChangeUserDataScreen(appUser: appUser)),
+                    ),
+                  ),
+                  if (currentUser.isAdmin) ...[
+                    const SizedBox(height: 10),
+                    generateButton(
+                      text: 'Resetuj lozinku',
+                      icon: Icons.lock_reset_outlined,
+                      backgroundColor: const Color(0xFF1A7A30),
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) =>
+                                AdminResetPasswordScreen(user: appUser)),
                       ),
-                    ],
-                  ),
-                ),
-              ],
+                    ),
+                  ],
+
+                  // Fruit types
+                  if (appUser.fruitTypes.isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Voćne vrste',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF388E3C),
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    ...appUser.fruitTypes.map(
+                      (fruit) => Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          leading: const CircleAvatar(
+                            backgroundColor: Color(0xFFE8F5E9),
+                            child: Icon(Icons.forest,
+                                color: Color(0xFF388E3C), size: 20),
+                          ),
+                          title: Text(
+                            fruit.fruitTypeName,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          trailing: Text(
+                            '${fruit.numberOfTrees} stabala',
+                            style: const TextStyle(
+                              color: Color(0xFF6B7280),
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
-            
-          ),
-        ],
-      ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          border: Border(
-            top: BorderSide(
-              color: Colors.brown[500] ?? Colors.brown,
-              width: 1.0,
-            ),
-          ),
+          ],
         ),
-        child: BottomNavigationBar(
-            currentIndex: isAdmin ? 4 : 2,
-            selectedItemColor: Colors.brown[500],
-            unselectedItemColor: Colors.grey,
-            onTap: _onItemTapped,
-            type: BottomNavigationBarType.fixed,
-            items: bottomNavItems),
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: isAdmin ? 4 : 2,
+        backgroundColor: Colors.white,
+        selectedItemColor: const Color(0xFF388E3C),
+        unselectedItemColor: Colors.grey[400],
+        elevation: 8,
+        onTap: _onItemTapped,
+        type: BottomNavigationBarType.fixed,
+        items: bottomNavItems,
       ),
     );
   }

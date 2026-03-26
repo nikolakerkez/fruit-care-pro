@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fruit_care_pro/current_user_service.dart';
 import 'package:fruit_care_pro/exceptions/login_exception.dart';
+import 'package:fruit_care_pro/services/notification_service.dart';
 import 'package:fruit_care_pro/utils/error_logger.dart';
 import 'package:provider/provider.dart';
 import 'package:fruit_care_pro/shared_ui_components.dart';
@@ -36,11 +37,11 @@ class _LoginScreenState extends State<LoginScreen> {
   // Email domain constant - should be in config file
   static const String _emailDomain = '@fruitcarepro.com';
 
-  @override
-  void initState() {
-    super.initState();
-    _userService = context.read<UserService>();
-  }
+@override
+void initState() {
+  super.initState();
+  _userService = context.read<UserService>();
+}
 
   @override
   void dispose() {
@@ -146,130 +147,129 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   /// Navigates to appropriate screen based on user type and status
-  void _navigateToNextScreen(AppUser user) {
-    Widget nextScreen;
+void _navigateToNextScreen(AppUser user) {
+  Widget nextScreen;
 
-    if (user.isPasswordChangeNeeded) {
-      nextScreen = ChangePasswordScreen();
-    } else if (user.isAdmin) {
-      nextScreen = const AdminMainScreen();
-    } else {
-      nextScreen = const UserMainScreen();
-    }
-
-    // Replace current route to prevent going back to login
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => nextScreen),
-    );
+  if (user.isPasswordChangeNeeded) {
+    nextScreen = ChangePasswordScreen();
+  } else if (user.isAdmin) {
+    nextScreen = const AdminMainScreen();
+  } else {
+    nextScreen = const UserMainScreen();
   }
+
+  Navigator.pushReplacement(
+    context,
+    MaterialPageRoute(builder: (context) => nextScreen),
+  ).then((_) {
+    // Navigator je spreman, obradi pending notifikaciju
+    NotificationService.handlePendingNotification();
+  });
+}
+
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(kToolbarHeight + 3),
-        child: Container(
-          color: Colors.green[800],
-          child: Column(
-            children: [
-              AppBar(
-                elevation: 0,
-                centerTitle: true,
-                backgroundColor: Colors.transparent,
-                title: const Text(
+      backgroundColor: const Color(0xFFF5F7F5),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+            child: Column(
+              children: [
+                // Logo + title
+                const SizedBox(height: 16),
+                Image.asset('assets/images/app_icon5.png', width: 90, height: 90),
+                const SizedBox(height: 16),
+                const Text(
                   'Fruit Care Pro',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
-              Container(
-                height: 3,
-                color: Colors.brown[500],
-              ),
-            ],
-          ),
-        ),
-      ),
-      body: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              // Logo section
-              Container(
-                color: Colors.transparent,
-                padding: const EdgeInsets.all(30),
-                child: const Icon(
-                  Icons.agriculture_rounded,
-                  size: 150,
-                ),
-              ),
-
-              // Username field
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
-                child: generateTextField(
-                  labelText: "Korisničko ime",
-                  controller: _usernameController,
-                  iconData: Icons.person,
-                  validator: _validateUsername,
-                  enabled: !_isLoading,
-                ),
-              ),
-
-              // Password field
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
-                child: generateTextField(
-                  labelText: "Šifra",
-                  controller: _passwordController,
-                  iconData: Icons.lock_outline,
-                  isPassword: _obscurePassword,
-                  validator: _validatePassword,
-                  enabled: !_isLoading,
-                  sufixIconWidget: IconButton(
-                    icon: Icon(
-                      _obscurePassword
-                          ? Icons.visibility_off
-                          : Icons.visibility,
-                    ),
-                    onPressed: () {
-                      setState(() => _obscurePassword = !_obscurePassword);
-                    },
+                  style: TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF388E3C),
+                    letterSpacing: 0.5,
                   ),
                 ),
-              ),
-
-              // Login button
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
-                child: _isLoading
-                    ? const CircularProgressIndicator()
-                    : generateButton(
-                        text: "Prijavite se na portal",
-                        onPressed: _handleLogin,
-                      ),
-              ),
-
-              // Error message
-              if (_errorMessage != null) ...[
                 const SizedBox(height: 6),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 40),
-                  child: Text(
-                    _errorMessage!,
-                    style: const TextStyle(
-                      color: Colors.red,
-                      fontSize: 12,
+                const Text(
+                  'Prijavite se na vaš nalog',
+                  style: TextStyle(fontSize: 14, color: Color(0xFF6B7280)),
+                ),
+                const SizedBox(height: 36),
+
+                // Form card
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.06),
+                        blurRadius: 20,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  padding: const EdgeInsets.all(24),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      children: [
+                        generateTextField(
+                          labelText: "Korisničko ime",
+                          controller: _usernameController,
+                          iconData: Icons.person_outline,
+                          validator: _validateUsername,
+                          enabled: !_isLoading,
+                        ),
+                        const SizedBox(height: 16),
+                        generateTextField(
+                          labelText: "Šifra",
+                          controller: _passwordController,
+                          iconData: Icons.lock_outline,
+                          isPassword: _obscurePassword,
+                          validator: _validatePassword,
+                          enabled: !_isLoading,
+                          sufixIconWidget: IconButton(
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                              color: const Color(0xFF6B7280),
+                              size: 20,
+                            ),
+                            onPressed: () {
+                              setState(() => _obscurePassword = !_obscurePassword);
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        _isLoading
+                            ? const CircularProgressIndicator(
+                                color: Color(0xFF388E3C),
+                              )
+                            : generateButton(
+                                text: "Prijavite se",
+                                onPressed: _handleLogin,
+                              ),
+                        if (_errorMessage != null) ...[
+                          const SizedBox(height: 14),
+                          Text(
+                            _errorMessage!,
+                            style: const TextStyle(
+                              color: Colors.red,
+                              fontSize: 13,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ],
                     ),
-                    textAlign: TextAlign.center,
                   ),
                 ),
               ],
-            ],
+            ),
           ),
         ),
       ),

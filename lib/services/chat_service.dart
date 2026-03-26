@@ -168,9 +168,13 @@ class ChatService {
         'user1Id': user1Id,
         'user2Id': user2Id,
         'memberIds': [user1Id, user2Id],
-        'lastMessage': '',
+        'lastMessage': {
+          'text': '',
+          'timestamp': FieldValue.serverTimestamp(),
+          'senderId': '',
+          'readBy': {},
+        },
         'lastMessageTimestamp': FieldValue.serverTimestamp(),
-        'isLastMessageRead': 0,
         'lastMessageSenderId': '',
         'lastMessageReceiverId': '',
       });
@@ -474,12 +478,13 @@ class ChatService {
       );
 
       // Track progress for thumbnail only
-      thumbTask.snapshotEvents.listen((snapshot) {
+      final progressSub = thumbTask.snapshotEvents.listen((snapshot) {
         final progress = snapshot.bytesTransferred / snapshot.totalBytes;
         messageRef.update({'uploadProgress': progress * 0.5}); // 0-50%
       });
 
       await thumbTask;
+      await progressSub.cancel();
       final thumbUrl = await thumbRef.getDownloadURL();
 
       debugPrint('✅ Thumbnail uploaded! Updating message...');

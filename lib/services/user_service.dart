@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:fruit_care_pro/exceptions/get_admin_id_exception.dart';
 import 'package:fruit_care_pro/exceptions/get_all_users_exception.dart';
 import 'package:fruit_care_pro/exceptions/login_exception.dart';
@@ -58,7 +59,6 @@ class UserService {
       }
 
       await NotificationService.saveTokenAfterLogin();
-      
       return AppUser.fromFirestore(userData, user.uid, []);
     } on FirebaseAuthException catch (e) {
       // Handle specific Firebase Auth errors
@@ -511,9 +511,6 @@ Future<String?> getAdminId() async {
         // User ref from the firestore
         DocumentReference userRef = _db.collection('users').doc(user.id);
 
-        // Check if user already exists
-        DocumentSnapshot userSnapshot = await transaction.get(userRef);
-
         transaction.set(userRef, {'city': user.city, 'phone': user.phone},
             SetOptions(merge: true));
 
@@ -577,10 +574,24 @@ Future<String?> getAdminId() async {
         }
 
         // 3. Sve što je ostalo u existingData znači da je obrisano
-        for (var remaining in existingData.values) {
+        for (var entry in existingData.entries) {
+          final fruitTypeId = entry.key;
+          final remaining = entry.value;
+
           transaction.delete(userFruitRef.doc(remaining['docId']));
 
-          //what about chat
+          // Ukloni korisnika iz group chata
+          final fruitTypeChatRef = _db.collection('chats').doc(fruitTypeId);
+          transaction.update(fruitTypeChatRef, {
+            'memberIds': FieldValue.arrayRemove([user.id]),
+          });
+
+          final fruitTypeChatMemberRef = _db
+              .collection('chats')
+              .doc(fruitTypeId)
+              .collection('members')
+              .doc(user.id);
+          transaction.delete(fruitTypeChatMemberRef);
         }
       });
       return true;
@@ -606,7 +617,7 @@ Future<String?> getAdminId() async {
       final userDoc = await _db.collection('users').doc(userId).get();
 
       if (!userDoc.exists) {
-        print('User not found in Firestore.');
+        debugPrint('User not found in Firestore.');
         return null;
       }
 
@@ -637,12 +648,11 @@ Future<String?> getAdminId() async {
         }
       }
 
-      var userResult = AppUser.fromFirestore(
-          userDoc.data() as Map<String, dynamic>, userId, fruitTypes);
+      var userResult = AppUser.fromFirestore(userData, userId, fruitTypes);
 
       return userResult;
     } catch (e) {
-      print('Error while getting user details: $e');
+      debugPrint('Error while getting user details: $e');
       return null;
     }
   }
@@ -685,7 +695,15 @@ Future<String?> getAdminId() async {
         'thumbPath': thumbPath,
         'localImagePath': file.path,
       });
-    } catch (e) {}
+    } catch (e, stackTrace) {
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Failed to update user profile image',
+        screen: 'UserService.updateUserProfileImage',
+        additionalData: {'user_id': userId},
+      );
+    }
   }
 
   Future<String> generateChatId(String user1Id, String user2Id) async {

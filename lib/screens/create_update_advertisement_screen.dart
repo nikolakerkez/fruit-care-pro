@@ -330,28 +330,12 @@ class _CreateUpdateAdvertisementScreenState
 
   /// Builds app bar with title
   PreferredSizeWidget _buildAppBar() {
-    return PreferredSize(
-      preferredSize: const Size.fromHeight(kToolbarHeight + 3),
-      child: Container(
-        color: Colors.green[800],
-        child: Column(
-          children: [
-            AppBar(
-              elevation: 0,
-              backgroundColor: Colors.transparent,
+    return AppBar(
+              
               title: Text(
                 _title,
-                style: const TextStyle(color: Colors.white),
-              ),
-            ),
-            Container(
-              height: 3,
-              color: Colors.brown[500],
-            ),
-          ],
-        ),
-      ),
-    );
+                              ),
+            );
   }
 
   /// Builds main body content
@@ -415,7 +399,7 @@ class _CreateUpdateAdvertisementScreenState
               decoration: BoxDecoration(
                 shape: BoxShape.rectangle,
                 border: Border.all(
-                  color: Colors.brown[500] ?? Colors.brown,
+                  color: const Color(0xFF1A7A30),
                   width: 2,
                 ),
               ),
@@ -440,12 +424,12 @@ class _CreateUpdateAdvertisementScreenState
         const SizedBox(height: 8),
         TextButton.icon(
           onPressed: _isUploadingImage || _isLoading ? null : _pickImage,
-          icon: Icon(Icons.edit, size: 20, color: Colors.green[800]),
+          icon: Icon(Icons.edit, size: 20, color: const Color(0xFF388E3C)),
           label: Text(
             _thumbUrl == null && _localProfileImage == null
                 ? "Dodaj sliku (opciono)"
                 : "Izmeni sliku",
-            style: TextStyle(color: Colors.green[800], fontSize: 16),
+            style: TextStyle(color: const Color(0xFF388E3C), fontSize: 16),
           ),
         ),
       ],
