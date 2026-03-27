@@ -102,6 +102,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         });
       }
     });
+    // Rebuild when current user's data changes (e.g. isPremium toggled by admin)
+    _subscriptions.add(
+      CurrentUserService.instance.userUpdates.listen((_) {
+        if (mounted) setState(() {});
+      }),
+    );
   }
 
   @override
@@ -335,6 +341,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
 
     final allMessages = _allPagedResults.expand((page) => page).toList();
     _chatStreamController.add(allMessages);
+
+    // Mark incoming messages as read while chat is open
+    _markMessagesAsRead();
   }
 
   /// Update paged results with new documents

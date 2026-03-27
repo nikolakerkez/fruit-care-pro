@@ -667,7 +667,11 @@ Future<String?> getAdminId() async {
 
 
 
-  Future<void> updateUserProfileImage(String userId, File file) async {
+  Future<void> updateUserProfileImage(
+    String userId,
+    File file, {
+    Function(double)? onProgress,
+  }) async {
     try {
       await _db.collection('users').doc(userId).update({
         'imageUrl': null,
@@ -678,7 +682,7 @@ Future<String?> getAdminId() async {
       });
 
       Map<String, String>? uploadImageResult =
-          await uploadImage(file, 'slika2');
+          await uploadImageWithProgress(file, 'slika2', onProgress: onProgress);
 
       String? imagePath = uploadImageResult?["fullPath"];
 

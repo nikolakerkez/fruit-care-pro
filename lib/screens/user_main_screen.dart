@@ -1,4 +1,5 @@
-import 'package:firebase_messaging/firebase_messaging.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:fruit_care_pro/models/chat_item.dart';
 import 'package:fruit_care_pro/models/user.dart';
 import 'package:fruit_care_pro/services/chat_service.dart';
+import 'package:fruit_care_pro/services/user_service.dart';
 import 'package:fruit_care_pro/current_user_service.dart';
 import 'package:fruit_care_pro/shared_ui_components.dart';
 
@@ -26,11 +28,12 @@ class _UserMainScreenState extends State<UserMainScreen> {
 
   // State
   late final AppUser _currentUser;
+  StreamSubscription? _forceLogoutSub;
 
   @override
   void initState() {
     super.initState();
-    
+
     // Get current user
     final currentUser = CurrentUserService.instance.currentUser;
     if (currentUser == null) {
@@ -43,6 +46,25 @@ class _UserMainScreenState extends State<UserMainScreen> {
 
     // Get service from Provider
     _chatService = context.read<ChatService>();
+
+    // Force logout if admin deactivates this account
+    _forceLogoutSub = CurrentUserService.instance.forceLogoutStream.listen((_) {
+      if (mounted) _performForceLogout();
+    });
+  }
+
+  @override
+  void dispose() {
+    _forceLogoutSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _performForceLogout() async {
+    await context.read<UserService>().logout();
+    CurrentUserService.instance.clearUser();
+    if (mounted) {
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+    }
   }
 
   void _onItemTapped(int index) {

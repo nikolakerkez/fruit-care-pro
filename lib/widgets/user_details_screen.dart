@@ -37,6 +37,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
       fruitTypes: []);
   File? _localProfileImage;
   String? thumbUrl;
+  double? _uploadProgress;
 
   final AppUser currentUser = CurrentUserService.instance.currentUser!;
   @override
@@ -47,7 +48,6 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
     }
   }
 
-  // Pick image (implementacija za slike)
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
@@ -57,9 +57,18 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
 
       setState(() {
         _localProfileImage = imageFile;
+        _uploadProgress = 0.0;
       });
 
-      await _userService.updateUserProfileImage(appUser.id, imageFile);
+      await _userService.updateUserProfileImage(
+        appUser.id,
+        imageFile,
+        onProgress: (progress) {
+          if (mounted) setState(() => _uploadProgress = progress);
+        },
+      );
+
+      if (mounted) setState(() => _uploadProgress = null);
 
       _loadUser(appUser.id);
     }
@@ -431,6 +440,21 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                     ),
                   ),
                   const SizedBox(height: 14),
+                  if (_uploadProgress != null) ...[
+                    SizedBox(
+                      width: 160,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: _uploadProgress,
+                          minHeight: 4,
+                          backgroundColor: Colors.white24,
+                          valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   Text(
                     appUser.name,
                     style: const TextStyle(

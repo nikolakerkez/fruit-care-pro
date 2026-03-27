@@ -291,14 +291,13 @@ class _UserListScreenState extends State<UserListScreen> {
                     inactiveTrackColor: Colors.grey[300],
                   ),
                   onTap: () {
-                    // Navigate to the UserDetailsScreen with the selected userId
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (context) =>
                             UserDetailsScreen(userId: user.id),
                       ),
-                    );
+                    ).then((_) => _loadUsers());
                   },
                 );
               },

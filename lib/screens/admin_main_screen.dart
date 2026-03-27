@@ -152,7 +152,7 @@ Future<void> _loadUsers() async {
       Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => routes[index]),
-      );
+      ).then((_) => _loadUsers());
     }
   }
 

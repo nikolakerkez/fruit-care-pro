@@ -59,6 +59,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   final List<StreamSubscription> _subscriptions = [];
   Timestamp? _userLastMessageTimestamp;
 
+  // Visibility cutoff — non-admin users only see messages from this timestamp onwards
+  Timestamp? _messagesVisibleFrom;
+
   // User state
   AppUser? get _currentUser => CurrentUserService.instance.currentUser;
   bool get _isAdmin => _currentUser?.isAdmin ?? false;
@@ -123,6 +126,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         onTimeout: () => throw Exception('Timeout pri učitavanju admin podataka'),
       );
 
+      // Load visibility cutoff for non-admin users
+      await _loadMessagesVisibleFrom();
+
       // Mark messages as read — non-critical, run in background
       _markMessagesAsRead();
 
@@ -175,12 +181,33 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   /// Load admin ID from user service
   Future<void> _loadAdminId() async {
     final adminId = await _userService.getAdminId();
-    
+
     if (adminId == null || adminId.isEmpty) {
       throw Exception('Admin ID not found');
     }
 
     _adminId = adminId;
+  }
+
+  /// Load the timestamp from which messages are visible for the current user.
+  /// Admin sees all messages; regular users only see messages from when they joined.
+  Future<void> _loadMessagesVisibleFrom() async {
+    if (_isAdmin) return; // admin sees everything
+
+    try {
+      final memberDoc = await FirebaseFirestore.instance
+          .collection('chats')
+          .doc(_chatId)
+          .collection('members')
+          .doc(_myId)
+          .get();
+
+      if (memberDoc.exists) {
+        _messagesVisibleFrom = memberDoc.data()?['messagesVisibleFrom'] as Timestamp?;
+      }
+    } catch (e) {
+      // Non-critical — if it fails, user sees all messages
+    }
   }
 
   /// Mark all messages as read for current user
@@ -254,6 +281,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         .orderBy('timestamp', descending: true)
         .limit(20);
 
+    if (_messagesVisibleFrom != null) {
+      query = query.where('timestamp', isGreaterThanOrEqualTo: _messagesVisibleFrom);
+    }
+
     if (_lastDocument != null) {
       query = query.startAfterDocument(_lastDocument!);
     }
@@ -326,12 +357,15 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     }
   }
 
-  /// Emit all messages to stream
+  /// Emit all messages to stream while marking them as read
   void _emitAllMessages() {
     if (_chatStreamController.isClosed) return;
-    
+
     final allMessages = _allPagedResults.expand((page) => page).toList();
     _chatStreamController.add(allMessages);
+
+    // Mark incoming messages as read while chat is open
+    _markMessagesAsRead();
   }
 
   /// Update paged results with new documents
