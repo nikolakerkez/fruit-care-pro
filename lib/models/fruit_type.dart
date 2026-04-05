@@ -6,7 +6,7 @@ class FruitType {
   final int? numberOfTreesPerAre;
   TextEditingController controller;
 
-  FruitType({required this.id, required this.name, this.numberOfTreesPerAre}) : controller = TextEditingController(text: numberOfTreesPerAre.toString());
+  FruitType({required this.id, required this.name, this.numberOfTreesPerAre}) : controller = TextEditingController(text: numberOfTreesPerAre?.toString() ?? '');
 
   factory FruitType.fromFirestore(
       Map<String, dynamic> data, String documentId) {

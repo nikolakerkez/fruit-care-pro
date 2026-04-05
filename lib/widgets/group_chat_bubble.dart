@@ -201,7 +201,7 @@ class GroupChatBubble extends StatelessWidget {
           TextButton.icon(
             onPressed: () {
               // TODO: Retry upload
-              print('Retry upload');
+              debugPrint('Retry upload');
             },
             icon: const Icon(Icons.refresh),
             label: const Text('Pokušaj ponovo'),

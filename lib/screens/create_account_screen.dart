@@ -2,7 +2,6 @@ import 'package:fruit_care_pro/models/create_user.dart';
 import 'package:fruit_care_pro/models/create_user_result.dart';
 import 'package:fruit_care_pro/models/fruit_type.dart';
 import 'package:fruit_care_pro/models/user_fruit_type.dart';
-import 'package:fruit_care_pro/screens/users_screen.dart';
 import 'package:fruit_care_pro/services/fruit_types_service.dart';
 import 'package:fruit_care_pro/services/user_service.dart';
 import 'package:flutter/material.dart';
@@ -99,10 +98,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       return;
     }
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const UserListScreen()),
-    );
+    if (mounted) Navigator.pop(context);
   }
 
   List<FruitType> GetFruitTypes() {

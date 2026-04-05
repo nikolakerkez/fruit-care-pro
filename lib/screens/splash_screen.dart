@@ -27,7 +27,7 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _checkAuth() async {
-    await Future.delayed(const Duration(milliseconds: 5000));
+    await Future.delayed(const Duration(milliseconds: 2000));
 
     if (!mounted) return;
 
@@ -97,7 +97,7 @@ class _SplashScreenState extends State<SplashScreen> {
         fit: StackFit.expand,
         children: [
           Image.asset(
-            'assets/images/OIG1.jpeg',
+            'assets/images/MIS.png',
             fit: BoxFit.cover,
           ),
           Positioned(

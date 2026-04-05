@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fruit_care_pro/current_user_service.dart';
 import 'package:fruit_care_pro/screens/admin_main_screen.dart';
 import 'package:fruit_care_pro/screens/admin_reset_password_screen.dart';
@@ -17,7 +18,8 @@ import 'package:image_picker/image_picker.dart';
 
 class UserDetailsScreen extends StatefulWidget {
   final String? userId;
-  const UserDetailsScreen({super.key, this.userId});
+  final int? activeBottomNavIndex;
+  const UserDetailsScreen({super.key, this.userId, this.activeBottomNavIndex});
 
   @override
   _UserDetailsScreenState createState() => _UserDetailsScreenState();
@@ -101,7 +103,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
               MaterialPageRoute(
                   builder: (context) => AdminMainScreen()));
         } else {
-          print(currentUser.name);
+          debugPrint(currentUser.name);
           Navigator.push(
               context,
               MaterialPageRoute(
@@ -149,6 +151,124 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
         break;
     }
   }
+  // 🗑️ Delete account dialog
+  Future<void> _showDeleteAccountDialog() async {
+    final passwordController = TextEditingController();
+    bool obscure = true;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Icon(Icons.delete_forever, color: Colors.red[700]),
+              const SizedBox(width: 8),
+              const Text('Obriši nalog'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Ova radnja je nepovratna. Svi vaši podaci će biti trajno obrisani.',
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Unesite lozinku za potvrdu:',
+                style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: passwordController,
+                obscureText: obscure,
+                decoration: InputDecoration(
+                  labelText: 'Lozinka',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  suffixIcon: IconButton(
+                    icon: Icon(obscure ? Icons.visibility_off : Icons.visibility),
+                    onPressed: () => setDialogState(() => obscure = !obscure),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text('Otkaži', style: TextStyle(color: Colors.grey[700])),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red[700],
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text('Obriši nalog',
+                  style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final password = passwordController.text;
+
+    if (confirmed == true && mounted) {
+      await _performDeleteAccount(password);
+    }
+  }
+
+  Future<void> _performDeleteAccount(String password) async {
+    if (password.isEmpty) {
+      showErrorDialog(context, 'Unesite lozinku');
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Brisanje naloga...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      await _userService.deleteAccount(password);
+      CurrentUserService.instance.clearUser();
+
+      if (mounted) Navigator.of(context).pop();
+      if (mounted) {
+        Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+      }
+    } on FirebaseAuthException catch (e) {
+      if (mounted) Navigator.of(context).pop();
+      final message =
+          (e.code == 'wrong-password' || e.code == 'invalid-credential')
+              ? 'Pogrešna lozinka'
+              : 'Greška pri brisanju naloga';
+      if (mounted) showErrorDialog(context, message);
+    } catch (_) {
+      if (mounted) Navigator.of(context).pop();
+      if (mounted) showErrorDialog(context, 'Greška pri brisanju naloga');
+    }
+  }
+
   // 🔥 Logout dialog
   Future<void> _showLogoutDialog() async {
     final shouldLogout = await showDialog<bool>(
@@ -381,10 +501,11 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
       appBar: AppBar(
         title: const Text('Profil'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _showLogoutDialog,
-          ),
+          if (appUser.id == currentUser.id)
+            IconButton(
+              icon: const Icon(Icons.logout),
+              onPressed: _showLogoutDialog,
+            ),
         ],
         bottom: const PreferredSize(
           preferredSize: Size.fromHeight(2),
@@ -531,6 +652,15 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                       ),
                     ),
                   ],
+                  if (!currentUser.isAdmin && appUser.id == currentUser.id) ...[
+                    const SizedBox(height: 10),
+                    generateButton(
+                      text: 'Obriši nalog',
+                      icon: Icons.delete_forever_outlined,
+                      backgroundColor: Colors.red[700]!,
+                      onPressed: _showDeleteAccountDialog,
+                    ),
+                  ],
 
                   // Fruit types
                   if (appUser.fruitTypes.isNotEmpty) ...[
@@ -576,7 +706,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
         ),
       ),
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: isAdmin ? 4 : 2,
+        currentIndex: widget.activeBottomNavIndex ?? (isAdmin ? 4 : 2),
         backgroundColor: Colors.white,
         selectedItemColor: const Color(0xFF388E3C),
         unselectedItemColor: Colors.grey[400],

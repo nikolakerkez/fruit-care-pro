@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
@@ -29,6 +30,10 @@ class _UserMainScreenState extends State<UserMainScreen> {
   // State
   late final AppUser _currentUser;
   StreamSubscription? _forceLogoutSub;
+
+  // messagesVisibleFrom per group chat: {chatId: Timestamp}
+  Map<String, Timestamp> _groupVisibilityMap = {};
+  bool _visibilityLoaded = false;
 
   @override
   void initState() {
@@ -65,6 +70,29 @@ class _UserMainScreenState extends State<UserMainScreen> {
     if (mounted) {
       Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
     }
+  }
+
+  Future<void> _loadGroupVisibility(List<String> groupChatIds) async {
+    if (groupChatIds.isEmpty) return;
+    final db = FirebaseFirestore.instance;
+    final results = await Future.wait(
+      groupChatIds.map((chatId) async {
+        final doc = await db
+            .collection('chats')
+            .doc(chatId)
+            .collection('members')
+            .doc(_currentUser.id)
+            .get();
+        final ts = doc.data()?['messagesVisibleFrom'] as Timestamp?;
+        return MapEntry(chatId, ts);
+      }),
+    );
+    if (!mounted) return;
+    setState(() {
+      for (final entry in results) {
+        if (entry.value != null) _groupVisibilityMap[entry.key] = entry.value!;
+      }
+    });
   }
 
   void _onItemTapped(int index) {
@@ -144,6 +172,16 @@ class _UserMainScreenState extends State<UserMainScreen> {
           return const Center(child: Text('Nema poruka'));
         }
 
+        // Load visibility cutoffs once when chat list first arrives
+        if (!_visibilityLoaded) {
+          _visibilityLoaded = true;
+          final groupIds = snapshot.data!
+              .where((c) => c.isGroup)
+              .map((c) => c.id)
+              .toList();
+          _loadGroupVisibility(groupIds);
+        }
+
         return ListView.builder(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           itemCount: snapshot.data!.length,
@@ -159,6 +197,7 @@ class _UserMainScreenState extends State<UserMainScreen> {
               child: _ChatListTile(
                 chat: chat,
                 userId: _currentUser.id,
+                visibleFrom: _groupVisibilityMap[chat.id],
                 onTap: () => _handleChatTap(chat),
               ),
             );
@@ -202,20 +241,28 @@ class _UserMainScreenState extends State<UserMainScreen> {
 class _ChatListTile extends StatelessWidget {
   final ChatItem chat;
   final String userId;
+  final Timestamp? visibleFrom;
   final VoidCallback onTap;
 
   const _ChatListTile({
     required this.chat,
     required this.userId,
     required this.onTap,
+    this.visibleFrom,
   });
 
   @override
   Widget build(BuildContext context) {
     final chatTitle = _getChatTitle();
     final thumbUrl = _getThumbUrl();
-    final lastMessage = chat.lastMessage;
-    final hasUnread = chat.hasUnreadLastMessage(userId);
+    // Hide last message if it predates when this user joined the group
+    final rawMessage = chat.lastMessage;
+    final lastMessage = (visibleFrom != null &&
+            rawMessage != null &&
+            rawMessage.timestamp.compareTo(visibleFrom!) < 0)
+        ? null
+        : rawMessage;
+    final hasUnread = lastMessage != null && chat.hasUnreadLastMessage(userId);
 
     return ListTile(
       leading: _buildAvatar(thumbUrl),

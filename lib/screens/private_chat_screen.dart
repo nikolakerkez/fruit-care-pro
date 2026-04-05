@@ -11,6 +11,7 @@ import 'package:fruit_care_pro/models/user.dart';
 import 'package:fruit_care_pro/services/chat_service.dart';
 import 'package:fruit_care_pro/services/user_service.dart';
 import 'package:fruit_care_pro/current_user_service.dart';
+import 'package:fruit_care_pro/services/notification_service.dart';
 import 'package:fruit_care_pro/shared_ui_components.dart';
 import 'package:fruit_care_pro/utils/error_logger.dart';
 import 'package:fruit_care_pro/widgets/date_separator.dart';
@@ -112,6 +113,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
 
   @override
   void dispose() {
+    // Korisnik napušta chat — obriši activeChatId
+    NotificationService.clearActiveChat();
+
     // Cancel all subscriptions
     for (var subscription in _subscriptions) {
       subscription.cancel();
@@ -155,6 +159,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         const Duration(seconds: 8),
         onTimeout: () => throw Exception('Timeout pri učitavanju podataka korisnika'),
       );
+
+      // Cancel notifications for this chat since user is now viewing it
+      NotificationService.cancelNotificationsForChat(_chatId);
+
+      // Označi da je korisnik aktivan u ovom chatu → Cloud Function neće slati notifikacije
+      NotificationService.setActiveChat(_chatId);
 
       // Mark messages as read — non-critical, run in background
       _markMessagesAsRead();
@@ -342,7 +352,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     final allMessages = _allPagedResults.expand((page) => page).toList();
     _chatStreamController.add(allMessages);
 
-    // Mark incoming messages as read while chat is open
+    // Mark all messages as read (individual messages + lastMessage in chat doc).
+    // After the first batch write the stream fires once more, but on that second
+    // pass nothing is unread so no writes happen and the stream stops re-firing.
     _markMessagesAsRead();
   }
 

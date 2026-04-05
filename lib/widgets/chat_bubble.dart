@@ -99,17 +99,12 @@ Widget _buildImage() {
     return _buildFailedImage();
   }
 
-  final messageId = messageData['messageId'] as String?;
-
   // Prikaži sliku BEZ mini loadera
   return GestureDetector(
     onTap: onImageTap,
-    child: Hero(
-      tag: 'image_$messageId', // 🔥 Unique tag
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: _buildImageWidget(),
-      ),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: _buildImageWidget(),
     ),
   );
   // ❌ UKLONI Stack sa mini loader-om
@@ -208,7 +203,7 @@ Widget _buildFailedImage() {
         TextButton.icon(
           onPressed: () {
             // TODO: Implementiraj retry logiku
-            print('Retry upload');
+            debugPrint('Retry upload');
           },
           icon: const Icon(Icons.refresh),
           label: const Text('Pokušaj ponovo'),

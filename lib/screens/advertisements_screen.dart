@@ -291,6 +291,15 @@ Future<void> _deleteAdvertisement(Advertisement ad) async {
           );
         }
         break;
+      case 4:
+        if (user?.isAdmin ?? false) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (context) => UserDetailsScreen(userId: user?.id)),
+          );
+        }
+        break;
     }
   }
 

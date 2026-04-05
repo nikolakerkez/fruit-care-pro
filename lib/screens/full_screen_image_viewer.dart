@@ -6,9 +6,9 @@ import 'package:flutter/material.dart';
 class FullScreenImageViewer extends StatelessWidget {
   final String? imageUrl;
   final String? localPath;
-  final String? messageId; // 🔥 Dodaj messageId
+  final String? messageId;
 
-  const FullScreenImageViewer({super.key, 
+  const FullScreenImageViewer({super.key,
     this.imageUrl,
     this.localPath,
     this.messageId,
@@ -16,53 +16,57 @@ class FullScreenImageViewer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Dismissible(
-      key: const Key('image_viewer'),
-      direction: DismissDirection.vertical, // 🔥 Swipe gore/dole da se zatvori
-      onDismissed: (_) => Navigator.pop(context),
-      background: Container(color: Colors.black),
-      child: Scaffold(
-        backgroundColor: Colors.black,
-        body: Stack(
-          children: [
-            // Slika sa Hero animacijom
-            Center(
-              child: Hero(
-                tag: 'image_$messageId', // 🔥 Isti tag kao u chat-u
-                child: InteractiveViewer(
-                  child: localPath != null
-                      ? Image.file(File(localPath!))
-                      : CachedNetworkImage(
-                          imageUrl: imageUrl!,
-                          fit: BoxFit.contain,
-                          placeholder: (context, url) => const Center(
-                            child: CircularProgressIndicator(),
-                          ),
-                        ),
-                ),
-              ),
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          Center(
+            child: InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: _buildImage(),
             ),
-            // Close dugme
-            SafeArea(
-              child: Positioned(
-                top: 16,
-                left: 16,
-                child: IconButton(
-                  icon: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.close, color: Colors.white, size: 24),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            child: SafeArea(
+              child: IconButton(
+                icon: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: const BoxDecoration(
+                    color: Colors.black54,
+                    shape: BoxShape.circle,
                   ),
-                  onPressed: () => Navigator.pop(context),
+                  child: const Icon(Icons.close, color: Colors.white, size: 24),
                 ),
+                onPressed: () => Navigator.pop(context),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildImage() {
+    if (localPath != null) {
+      return Image.file(File(localPath!));
+    }
+    if (imageUrl != null) {
+      return CachedNetworkImage(
+        imageUrl: imageUrl!,
+        fit: BoxFit.contain,
+        placeholder: (context, url) => const Center(
+          child: CircularProgressIndicator(color: Colors.white),
+        ),
+        errorWidget: (context, url, error) => const Center(
+          child: Icon(Icons.broken_image, color: Colors.white54, size: 64),
+        ),
+      );
+    }
+    return const Center(
+      child: Icon(Icons.image_not_supported, color: Colors.white54, size: 64),
     );
   }
 }

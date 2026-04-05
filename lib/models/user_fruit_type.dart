@@ -12,7 +12,7 @@ class UserFruitType {
     return UserFruitType(
       fruitTypeId: documentId,
       fruitTypeName: fruit['name'] ?? '',
-      numberOfTrees: user2Fruit['numberOfTrees'] ?? ''
+      numberOfTrees: user2Fruit['numberOfTrees'] ?? 0
     );
   }
 }

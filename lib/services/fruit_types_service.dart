@@ -62,38 +62,36 @@ class FruitTypesService {
 
       debugPrint('🗑️ Deleting fruit type: $fruitTypeId');
 
+      // Fetch user associations outside the transaction (non-transactional read)
+      final userQuery = await _db
+          .collection(_userFruitTypesCollection)
+          .where('fruitId', isEqualTo: fruitTypeId)
+          .get();
+
+      debugPrint('Found ${userQuery.docs.length} user associations to delete');
+
       await _db.runTransaction((transaction) async {
         final fruitRef = _db.collection(_fruitTypesCollection).doc(fruitTypeId);
+        final chatRef = _db.collection(_chatsCollection).doc(fruitTypeId);
 
-        // Check if fruit type exists
+        // All reads first
         final fruitDoc = await transaction.get(fruitRef);
+        final chatDoc = await transaction.get(chatRef);
+
         if (!fruitDoc.exists) {
           throw const DeleteFruitTypeException('Voćna vrsta ne postoji');
         }
 
-        // Delete user associations
-        final userQuery = await _db
-            .collection(_userFruitTypesCollection)
-            .where('fruitId', isEqualTo: fruitTypeId)
-            .get();
-
-        debugPrint('Found ${userQuery.docs.length} user associations to delete');
+        // Then writes
         for (var doc in userQuery.docs) {
           transaction.delete(doc.reference);
         }
 
-        // Delete associated chat
-        final chatQuery = await _db
-            .collection(_chatsCollection)
-            .where('id', isEqualTo: fruitTypeId)
-            .get();
-
-        debugPrint('Found ${chatQuery.docs.length} chats to delete');
-        for (var doc in chatQuery.docs) {
-          transaction.delete(doc.reference);
+        if (chatDoc.exists) {
+          transaction.delete(chatRef);
+          debugPrint('Deleted associated chat: $fruitTypeId');
         }
 
-        // Delete the fruit type itself
         transaction.delete(fruitRef);
       });
 
@@ -241,6 +239,50 @@ class FruitTypesService {
     }
   }
 
+  /// Returns all users associated with a fruit type, with their tree counts
+  Future<List<Map<String, dynamic>>> getUsersForFruitType(String fruitTypeId) async {
+    try {
+      final snap = await _db
+          .collection(_userFruitTypesCollection)
+          .where('fruitId', isEqualTo: fruitTypeId)
+          .get();
+
+      final result = <Map<String, dynamic>>[];
+
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final userId = data['userId'] as String?;
+        final numberOfTrees = data['numberOfTrees'] as int? ?? 0;
+
+        if (userId == null) continue;
+
+        final userDoc = await _db.collection('users').doc(userId).get();
+        if (!userDoc.exists) continue;
+
+        final userData = userDoc.data();
+        final name = userData?['name'] as String? ?? 'Nepoznat';
+        final thumbUrl = userData?['thumbUrl'] as String?;
+        result.add({
+          'name': name,
+          'numberOfTrees': numberOfTrees,
+          'thumbUrl': thumbUrl,
+        });
+      }
+
+      result.sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
+      return result;
+    } catch (e, stackTrace) {
+      ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Failed to get users for fruit type',
+        screen: 'FruitTypesService.getUsersForFruitType',
+        additionalData: {'fruit_type_id': fruitTypeId},
+      );
+      return [];
+    }
+  }
+
   /// Updates an existing fruit type and its associated chat name
   /// Throws UpdateFruitTypeException if operation fails
   Future<void> updateFruitType(FruitType fruitType) async {
@@ -263,29 +305,27 @@ class FruitTypesService {
       debugPrint('📝 Updating fruit type: ${fruitType.id}');
 
       await _db.runTransaction((transaction) async {
-        // Check if fruit type exists
         final fruitTypeRef =
             _db.collection(_fruitTypesCollection).doc(fruitType.id);
+        final fruitTypeChatRef =
+            _db.collection(_chatsCollection).doc(fruitType.id);
+
+        // All reads first
         final fruitDoc = await transaction.get(fruitTypeRef);
+        final chatDoc = await transaction.get(fruitTypeChatRef);
 
         if (!fruitDoc.exists) {
           throw const UpdateFruitTypeException('Voćna vrsta ne postoji');
         }
 
-        // Update fruit type document
+        // Then writes
         transaction.update(fruitTypeRef, {
           'name': fruitType.name,
           'numberOfTreesPerAre': fruitType.numberOfTreesPerAre,
         });
 
-        // Update associated chat name
-        final fruitTypeChatRef = _db.collection(_chatsCollection).doc(fruitType.id);
-        final chatDoc = await transaction.get(fruitTypeChatRef);
-
         if (chatDoc.exists) {
-          transaction.update(fruitTypeChatRef, {
-            'name': fruitType.name,
-          });
+          transaction.update(fruitTypeChatRef, {'name': fruitType.name});
           debugPrint('Updated associated chat name');
         } else {
           debugPrint('⚠️ No associated chat found for fruit type: ${fruitType.id}');

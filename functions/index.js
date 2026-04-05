@@ -213,10 +213,20 @@ exports.sendChatNotification = onDocumentCreated(
         .doc(senderId)
         .get();
       
-      const senderName = senderDoc.data()?.name || 
-                         senderDoc.data()?.displayName || 
+      const senderName = senderDoc.data()?.name ||
+                         senderDoc.data()?.displayName ||
                          'Neko';
-      
+
+      let messageText = message.message || '';
+      if (!messageText) {
+        // imageUrl je null pri kreiranju (upload još traje), ali message je prazan → slika
+        messageText = '📷 Slika';
+      }
+
+      const isGroupChat = chatData.type === 'group';
+      const notificationTitle = isGroupChat ? (chatData.name || senderName) : senderName;
+      const notificationBody = isGroupChat ? `${senderName}: ${messageText}` : messageText;
+
       const recipientIds = memberIds.filter(id => id !== senderId);
       
       // 🔍 DEBUG
@@ -240,10 +250,17 @@ exports.sendChatNotification = onDocumentCreated(
         console.log('📄 User data keys:', userDoc.exists ? Object.keys(userDoc.data()) : 'N/A');
         
         const token = userDoc.data()?.fcmToken;
-        
+        const activeChatId = userDoc.data()?.activeChatId;
+
         // 🔍 DEBUG
         console.log('🔑 Token za', recipientId, ':', token ? `EXISTS (${token.substring(0, 20)}...)` : 'NULL ❌');
-        
+
+        // Preskoči ako je korisnik već u ovom chatu
+        if (activeChatId === chatId) {
+          console.log(`⏭️ Skipping ${recipientId} - already in chat`);
+          return { recipientId, token: null };
+        }
+
         return { recipientId, token };
       });
       
@@ -257,17 +274,22 @@ exports.sendChatNotification = onDocumentCreated(
         return;
       }
       
-      let messageText = message.message || '';
-      if (message.imageUrl && !messageText) {
-        messageText = '📷 Slika';
-      }
-      
-      const notifications = validTokens.map(({ recipientId, token }) => {
+      const notifications = validTokens.map(async ({ recipientId, token }) => {
+        // Inkrementiraj badge counter za ovog korisnika i uzmi novi broj
+        const userRef = admin.firestore().collection('users').doc(recipientId);
+        const newBadgeCount = await admin.firestore().runTransaction(async (t) => {
+          const userDoc = await t.get(userRef);
+          const current = userDoc.data()?.badgeCount || 0;
+          const next = current + 1;
+          t.update(userRef, { badgeCount: next });
+          return next;
+        });
+
         return admin.messaging().send({
           token: token,
           notification: {
-            title: senderName,
-            body: messageText,
+            title: notificationTitle,
+            body: notificationBody,
           },
           data: {
             chatId: chatId,
@@ -278,7 +300,7 @@ exports.sendChatNotification = onDocumentCreated(
             payload: {
               aps: {
                 sound: 'default',
-                badge: 1,
+                badge: newBadgeCount,
                 'content-available': 1,
               },
             },

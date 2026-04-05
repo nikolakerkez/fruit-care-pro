@@ -1,5 +1,6 @@
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 
 Future<User?> createAccount(String name, String email, String password, String repeatedPassword) async
@@ -13,15 +14,15 @@ Future<User?> createAccount(String name, String email, String password, String r
 
       if (user != null)
       {
-        print("Succeded");
+        debugPrint("Succeded");
       }
       else
       {
-        print("Failed");
+        debugPrint("Failed");
       }
       return user;
   } catch (e) {
-    print(e);
+    debugPrint(e.toString());
     return null;
   }
 }
@@ -37,15 +38,15 @@ Future<User?> logIn(String email, String password) async
 
       if (user != null)
       {
-        print("Succeded");
+        debugPrint("Succeded");
       }
       else
       {
-        print("Failed");
+        debugPrint("Failed");
       }
       return user;
   } catch (e) {
-    print(e);
+    debugPrint(e.toString());
     return null;
   }
 }
@@ -55,7 +56,7 @@ Future signOut() async
   FirebaseAuth auth =  FirebaseAuth.instance;
 
   try {
-    auth.signOut();
+    await auth.signOut();
   } catch (e) {
     print(e);
   }

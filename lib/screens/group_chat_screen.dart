@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:async';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
@@ -14,6 +15,7 @@ import 'package:fruit_care_pro/utils/error_logger.dart';
 import 'package:fruit_care_pro/widgets/date_separator.dart';
 import 'package:fruit_care_pro/screens/message_info.dart';
 import 'package:fruit_care_pro/screens/full_screen_image_viewer.dart';
+import 'package:fruit_care_pro/services/notification_service.dart';
 
 class GroupChatScreen extends StatefulWidget {
   final String? chatId;
@@ -82,19 +84,22 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   @override
   void dispose() {
+    // Korisnik napušta chat — obriši activeChatId
+    NotificationService.clearActiveChat();
+
     // Cancel all subscriptions
     for (var subscription in _subscriptions) {
       subscription.cancel();
     }
     _subscriptions.clear();
-    
+
     // Close stream controller
     _chatStreamController.close();
-    
+
     // Dispose controllers
     _messageController.dispose();
     _scrollController.dispose();
-    
+
     super.dispose();
   }
 
@@ -128,6 +133,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
       // Load visibility cutoff for non-admin users
       await _loadMessagesVisibleFrom();
+
+      // Označi da je korisnik aktivan u ovom chatu → Cloud Function neće slati notifikacije
+      NotificationService.setActiveChat(_chatId);
 
       // Mark messages as read — non-critical, run in background
       _markMessagesAsRead();
@@ -175,6 +183,21 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
     if (_chatId.isEmpty) {
       throw Exception('Chat ID is required');
+    }
+
+    // Ako naziv nije prosleđen (npr. otvoreno iz notifikacije),
+    // dohvati ga iz chat dokumenta
+    if (_fruitTypeName.isEmpty) {
+      final chatDoc = await FirebaseFirestore.instance
+          .collection('chats')
+          .doc(_chatId)
+          .get();
+      if (chatDoc.exists) {
+        _fruitTypeName = chatDoc.data()?['name'] as String? ?? '';
+        if (_fruitTypeId.isEmpty) {
+          _fruitTypeId = _chatId;
+        }
+      }
     }
   }
 
@@ -364,7 +387,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     final allMessages = _allPagedResults.expand((page) => page).toList();
     _chatStreamController.add(allMessages);
 
-    // Mark incoming messages as read while chat is open
+    // Mark all messages as read (individual messages + lastMessage in chat doc).
+    // After the first batch write the stream fires once more, but on that second
+    // pass nothing is unread so no writes happen and the stream stops re-firing.
     _markMessagesAsRead();
   }
 
@@ -908,18 +933,20 @@ class _GroupChatBubble extends StatelessWidget {
     final localPath = messageData['localImagePath'] as String?;
 
     if (thumbUrl != null) {
-      return Image.network(
-        thumbUrl,
+      return CachedNetworkImage(
+        imageUrl: thumbUrl,
         height: 200,
         fit: BoxFit.cover,
-        loadingBuilder: (context, child, loadingProgress) {
-          if (loadingProgress == null) return child;
-          return Container(
-            height: 200,
-            color: Colors.grey[300],
-            child: const Center(child: CircularProgressIndicator()),
-          );
-        },
+        placeholder: (_, __) => Container(
+          height: 200,
+          color: Colors.grey[300],
+          child: const Center(child: CircularProgressIndicator()),
+        ),
+        errorWidget: (_, __, ___) => Container(
+          height: 200,
+          color: Colors.grey[300],
+          child: const Icon(Icons.broken_image, color: Colors.white, size: 50),
+        ),
       );
     }
 

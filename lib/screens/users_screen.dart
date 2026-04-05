@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fruit_care_pro/screens/advertisement_categories_screen.dart';
 import 'package:fruit_care_pro/screens/fruit_types_screen.dart';
 import 'package:fruit_care_pro/models/user.dart';
@@ -18,18 +19,18 @@ class UserListScreen extends StatefulWidget {
 }
 
 class _UserListScreenState extends State<UserListScreen> {
-  //List of all users
   List<AppUser> users = [];
-
-  //List of users based on search criteria
   List<AppUser> filteredUsers = [];
 
-  //Text controllers for searching users
+  DocumentSnapshot? _lastDoc;
+  bool _hasMore = true;
+  bool _isLoadingMore = false;
+  bool _isInitialLoading = true;
+
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
 
-  //Main service for searching users and execute actions
   late final UserService _userService;
-
   final user = CurrentUserService.instance.currentUser;
 
   @override
@@ -38,28 +39,54 @@ class _UserListScreenState extends State<UserListScreen> {
     _userService = context.read<UserService>();
     _loadUsers();
     _searchController.addListener(_filterUsers);
+    _scrollController.addListener(_onScroll);
   }
 
-  // Load users from the database
-  void _loadUsers() async {
-    List<AppUser>? dbUsers = await _userService.getAllUsers();
+  void _onScroll() {
+    // Učitaj još samo kad nema pretrage i kad smo blizu dna
+    if (_searchController.text.isNotEmpty) return;
+    if (!_hasMore || _isLoadingMore) return;
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      _loadMoreUsers();
+    }
+  }
 
+  Future<void> _loadUsers() async {
+    setState(() => _isInitialLoading = true);
+    final result = await _userService.getAllUsers();
     if (!mounted) return;
     setState(() {
-      users = dbUsers;
-      filteredUsers = dbUsers; // Initially, show all users
+      users = result.users;
+      filteredUsers = result.users;
+      _lastDoc = result.lastDoc;
+      _hasMore = result.users.length == 50;
+      _isInitialLoading = false;
     });
   }
 
-  // Filter users based on search input
-  void _filterUsers() {
-    String query = _searchController.text.toLowerCase();
-
+  Future<void> _loadMoreUsers() async {
+    setState(() => _isLoadingMore = true);
+    final result = await _userService.getAllUsers(startAfter: _lastDoc);
+    if (!mounted) return;
     setState(() {
-      filteredUsers = users.where((user) {
-        return user.name.toLowerCase().contains(query) ||
-            user.email.toLowerCase().contains(query);
-      }).toList();
+      users.addAll(result.users);
+      filteredUsers = users;
+      _lastDoc = result.lastDoc;
+      _hasMore = result.users.length == 50;
+      _isLoadingMore = false;
+    });
+  }
+
+  void _filterUsers() {
+    final query = _searchController.text.toLowerCase();
+    setState(() {
+      filteredUsers = query.isEmpty
+          ? users
+          : users.where((u) {
+              return u.name.toLowerCase().contains(query) ||
+                  u.email.toLowerCase().contains(query);
+            }).toList();
     });
   }
 
@@ -128,6 +155,7 @@ class _UserListScreenState extends State<UserListScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -172,8 +200,10 @@ class _UserListScreenState extends State<UserListScreen> {
                   IconButton(
                     icon: Icon(Icons.add, color: Colors.white),
                     onPressed: () {
-                      Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) => CreateAccountScreen()));
+                      Navigator.of(context)
+                          .push(MaterialPageRoute(
+                              builder: (_) => CreateAccountScreen()))
+                          .then((_) => _loadUsers());
                     },
                   ),
                 ],
@@ -217,10 +247,19 @@ class _UserListScreenState extends State<UserListScreen> {
             ),
           ),
           Expanded(
-            child: ListView.separated(
-              itemCount: filteredUsers.length,
+            child: _isInitialLoading
+                ? const Center(child: CircularProgressIndicator())
+                : ListView.separated(
+              controller: _scrollController,
+              itemCount: filteredUsers.length + (_isLoadingMore ? 1 : 0),
               separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (context, index) {
+                if (index == filteredUsers.length) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
                 final user = filteredUsers[index];
 
                 return ListTile(
@@ -294,8 +333,10 @@ class _UserListScreenState extends State<UserListScreen> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) =>
-                            UserDetailsScreen(userId: user.id),
+                        builder: (context) => UserDetailsScreen(
+                          userId: user.id,
+                          activeBottomNavIndex: 1,
+                        ),
                       ),
                     ).then((_) => _loadUsers());
                   },
@@ -306,6 +347,7 @@ class _UserListScreenState extends State<UserListScreen> {
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
+
         currentIndex: 1,
         backgroundColor: Colors.white,
         selectedItemColor: const Color(0xFF388E3C),

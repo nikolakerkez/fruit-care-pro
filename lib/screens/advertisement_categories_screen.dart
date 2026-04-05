@@ -60,6 +60,7 @@ class _AdvertisementCategoriesState
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           title: const Text("Potvrda brisanja"),
           content: Text(
             "Da li ste sigurni da želite da obrišete kategoriju: ${category.name}?",
@@ -67,13 +68,18 @@ class _AdvertisementCategoriesState
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text("Odustani"),
+              child: Text("Odustani", style: TextStyle(color: Colors.grey[700])),
             ),
-            TextButton(
+            ElevatedButton(
               onPressed: () {
                 Navigator.of(context).pop();
                 _deleteCategory(category);
               },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red[700],
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
               child: const Text("Obriši"),
             ),
           ],

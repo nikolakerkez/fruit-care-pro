@@ -60,7 +60,7 @@ class _AddUpdateFruitTypeState extends State<AddUpdateFruitType> {
       // Load existing fruit type data if editing
       if (!_isAddNew && widget.fruitType != null) {
         _nameController.text = widget.fruitType!.name;
-        _treesController.text = widget.fruitType!.numberOfTreesPerAre.toString();
+        _treesController.text = widget.fruitType!.numberOfTreesPerAre?.toString() ?? '';
       }
 
       // Get admin ID for creating new fruit types

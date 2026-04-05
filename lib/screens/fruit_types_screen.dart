@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:fruit_care_pro/exceptions/fruit_types_exception.dart';
 import 'package:fruit_care_pro/models/fruit_type.dart';
@@ -53,6 +54,7 @@ class _FruitListPageState extends State<FruitListPage> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           title: const Text("Potvrda brisanja"),
           content: Text(
             "Da li ste sigurni da želite da obrišete voćnu vrstu: ${fruitType.name}?",
@@ -60,13 +62,18 @@ class _FruitListPageState extends State<FruitListPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text("Odustani"),
+              child: Text("Odustani", style: TextStyle(color: Colors.grey[700])),
             ),
-            TextButton(
+            ElevatedButton(
               onPressed: () {
-                _deleteFruit(fruitType);
                 Navigator.of(context).pop();
+                _deleteFruit(fruitType);
               },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red[700],
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
               child: const Text("Obriši"),
             ),
           ],
@@ -320,6 +327,7 @@ class _FruitListPageState extends State<FruitListPage> {
                 final fruit = filtered[index];
                 return _FruitListItem(
                   fruit: fruit,
+                  onTap: () => _showFruitTypeUsers(fruit),
                   onEdit: () => _navigateToEditScreen(fruit),
                   onDelete: () => _showDeleteDialog(fruit),
                 );
@@ -338,6 +346,168 @@ class _FruitListPageState extends State<FruitListPage> {
       MaterialPageRoute(
         builder: (context) => AddUpdateFruitType(fruitType: fruit),
       ),
+    );
+  }
+
+  /// Shows bottom sheet with users for the given fruit type
+  void _showFruitTypeUsers(FruitType fruit) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.5,
+          minChildSize: 0.3,
+          maxChildSize: 0.85,
+          expand: false,
+          builder: (context, scrollController) {
+            return Column(
+              children: [
+                const SizedBox(height: 8),
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.forest, color: Color(0xFF388E3C)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          fruit.name,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF388E3C),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Korisnici ove voćne vrste',
+                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                    ),
+                  ),
+                ),
+                const Divider(height: 16),
+                Expanded(
+                  child: FutureBuilder<List<Map<String, dynamic>>>(
+                    future: _fruitTypesService.getUsersForFruitType(fruit.id),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      final users = snapshot.data ?? [];
+
+                      if (users.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.person_off, size: 48, color: Colors.grey[400]),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Nema korisnika za ovu voćnu vrstu',
+                                style: TextStyle(color: Colors.grey[600]),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      return ListView.separated(
+                        controller: scrollController,
+                        itemCount: users.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final u = users[index];
+                          final name = u['name'] as String;
+                          final numberOfTrees = u['numberOfTrees'] as int;
+                          final thumbUrl = u['thumbUrl'] as String?;
+
+                          return ListTile(
+                            leading: Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: const Color(0xFF66BB6A),
+                                  width: 2,
+                                ),
+                              ),
+                              child: ClipOval(
+                                child: thumbUrl != null
+                                    ? CachedNetworkImage(
+                                        imageUrl: thumbUrl,
+                                        fit: BoxFit.cover,
+                                        placeholder: (_, __) => Image.asset(
+                                          'assets/images/default_avatar.jpg',
+                                          fit: BoxFit.cover,
+                                        ),
+                                        errorWidget: (_, __, ___) => Image.asset(
+                                          'assets/images/default_avatar.jpg',
+                                          fit: BoxFit.cover,
+                                        ),
+                                      )
+                                    : Image.asset(
+                                        'assets/images/default_avatar.jpg',
+                                        fit: BoxFit.cover,
+                                      ),
+                              ),
+                            ),
+                            title: Text(
+                              name,
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            trailing: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE8F5E9),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: const Color(0xFF388E3C)),
+                              ),
+                              child: Text(
+                                '$numberOfTrees stabala',
+                                style: const TextStyle(
+                                  color: Color(0xFF388E3C),
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -384,11 +554,13 @@ class _FruitListPageState extends State<FruitListPage> {
 /// Individual fruit type list item widget
 class _FruitListItem extends StatelessWidget {
   final FruitType fruit;
+  final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _FruitListItem({
     required this.fruit,
+    required this.onTap,
     required this.onEdit,
     required this.onDelete,
   });
@@ -399,7 +571,9 @@ class _FruitListItem extends StatelessWidget {
       alignment: Alignment.center,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-        child: Container(
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: Colors.white,
@@ -451,6 +625,7 @@ class _FruitListItem extends StatelessWidget {
               ),
             ],
           ),
+        ),
         ),
       ),
     );

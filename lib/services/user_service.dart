@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:fruit_care_pro/exceptions/get_admin_id_exception.dart';
 import 'package:fruit_care_pro/exceptions/get_all_users_exception.dart';
@@ -185,29 +186,33 @@ Future<void> changePassword(
 }
 
 
-/// Retrieves all users from Firestore
-/// Returns list of [AppUser] objects
+/// Retrieves a page of users from Firestore
+/// Returns users and the last document for cursor-based pagination
 /// Throws [GetAllUsersException] on errors
-Future<List<AppUser>> getAllUsers() async {
+Future<({List<AppUser> users, DocumentSnapshot? lastDoc})> getAllUsers({
+  DocumentSnapshot? startAfter,
+  int limit = 50,
+}) async {
   try {
-    // Fetch all users from Firestore
-    final querySnapshot = await _db
+    Query<Map<String, dynamic>> query = _db
         .collection('users')
-        .orderBy('name') // Sort by name for consistent ordering
-        .get();
+        .orderBy('name')
+        .limit(limit);
 
-    // Check if collection is empty
-    if (querySnapshot.docs.isEmpty) {
-      return [];
+    if (startAfter != null) {
+      query = query.startAfterDocument(startAfter);
     }
 
-    // Map documents to AppUser objects
+    final querySnapshot = await query.get();
+
+    if (querySnapshot.docs.isEmpty) {
+      return (users: <AppUser>[], lastDoc: null);
+    }
+
     final users = querySnapshot.docs.map((doc) {
       try {
-        final data = doc.data();
-        return AppUser.fromFirestore(data, doc.id, []);
+        return AppUser.fromFirestore(doc.data(), doc.id, []);
       } catch (e) {
-        // Log individual parsing errors but continue with other users
         ErrorLogger.logError(
           e,
           StackTrace.current,
@@ -215,14 +220,13 @@ Future<List<AppUser>> getAllUsers() async {
           screen: 'UserService.getAllUsers',
           additionalData: {'user_id': doc.id},
         );
-        return null; // Will be filtered out below
+        return null;
       }
-    }).whereType<AppUser>().toList(); // Filter out null values
+    }).whereType<AppUser>().toList();
 
-    return users;
+    return (users: users, lastDoc: querySnapshot.docs.last);
 
   } on FirebaseException catch (e) {
-    // Handle Firestore-specific errors
     await ErrorLogger.logError(
       e,
       StackTrace.current,
@@ -230,20 +234,16 @@ Future<List<AppUser>> getAllUsers() async {
       screen: 'UserService.getAllUsers',
       additionalData: {'error_code': e.code},
     );
-
     throw GetAllUsersException(
       'Greška pri učitavanju korisnika: ${e.message}',
     );
-
   } catch (e, stackTrace) {
-    // Handle unexpected errors
     await ErrorLogger.logError(
       e,
       stackTrace,
       reason: 'Unexpected error while fetching users',
       screen: 'UserService.getAllUsers',
     );
-
     throw GetAllUsersException(
       'Neočekivana greška pri učitavanju korisnika',
     );
@@ -629,22 +629,24 @@ Future<String?> getAdminId() async {
           .where('userId', isEqualTo: userId)
           .get();
 
-      // 3. Dohvati sve fruitType dokumente
-      List<UserFruitType> fruitTypes = [];
+      // 3. Dohvati sve fruitType dokumente paralelno
+      final fruitDocs = await Future.wait(
+        userFruitTypesSnap.docs.map((doc) {
+          final fruitTypeId = doc.data()['fruitId'] as String;
+          return _db.collection('fruit_types').doc(fruitTypeId).get();
+        }),
+      );
 
-      for (var doc in userFruitTypesSnap.docs) {
-        final data = doc.data();
-        final fruitTypeId = data['fruitId'];
-
-        final fruitDoc =
-            await _db.collection('fruit_types').doc(fruitTypeId).get();
-
+      final List<UserFruitType> fruitTypes = [];
+      for (int i = 0; i < userFruitTypesSnap.docs.length; i++) {
+        final assocData = userFruitTypesSnap.docs[i].data();
+        final fruitDoc = fruitDocs[i];
         if (fruitDoc.exists) {
-          final fruitData = fruitDoc.data();
-
-          final fruitDataResult = UserFruitType.fromFirestore(
-              data, fruitData as Map<String, dynamic>, fruitTypeId);
-          fruitTypes.add(fruitDataResult);
+          fruitTypes.add(UserFruitType.fromFirestore(
+            assocData,
+            fruitDoc.data() as Map<String, dynamic>,
+            fruitDoc.id,
+          ));
         }
       }
 
@@ -708,6 +710,83 @@ Future<String?> getAdminId() async {
         additionalData: {'user_id': userId},
       );
     }
+  }
+
+  /// Briše korisnički nalog i sve povezane podatke.
+  /// Zahteva lozinku za re-autentifikaciju (Firebase uslov).
+  Future<void> deleteAccount(String password) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('Korisnik nije prijavljen');
+
+    // 1. Re-autentifikacija (obavezno pre brisanja Firebase Auth naloga)
+    final credential = EmailAuthProvider.credential(
+      email: user.email!,
+      password: password,
+    );
+    await user.reauthenticateWithCredential(credential);
+
+    final userId = user.uid;
+
+    // 2. Obriši FCM token
+    await NotificationService.clearToken();
+
+    // 3. Dohvati putanje slika iz Firestore-a
+    final userDoc = await _db.collection('users').doc(userId).get();
+    final userData = userDoc.data();
+    if (userData != null) {
+      final imagePath = userData['imagePath'] as String?;
+      final thumbPath = userData['thumbPath'] as String?;
+      if (imagePath != null) {
+        try { await FirebaseStorage.instance.ref(imagePath).delete(); } catch (_) {}
+      }
+      if (thumbPath != null) {
+        try { await FirebaseStorage.instance.ref(thumbPath).delete(); } catch (_) {}
+      }
+    }
+
+    // 4. Dohvati sve user_2_fruittypes veze
+    final userFruitSnap = await _db
+        .collection('user_2_fruittypes')
+        .where('userId', isEqualTo: userId)
+        .get();
+
+    // 5. Batch brisanje: user_2_fruittypes, uklanjanje iz group chat-ova, Firestore profil
+    final batch = _db.batch();
+
+    for (final doc in userFruitSnap.docs) {
+      batch.delete(doc.reference);
+
+      final fruitTypeId = doc.data()['fruitId'] as String?;
+      if (fruitTypeId != null) {
+        batch.update(
+          _db.collection('chats').doc(fruitTypeId),
+          {'memberIds': FieldValue.arrayRemove([userId])},
+        );
+        batch.delete(
+          _db.collection('chats').doc(fruitTypeId).collection('members').doc(userId),
+        );
+      }
+    }
+
+    batch.delete(_db.collection('users').doc(userId));
+    await batch.commit();
+
+    // 6. Obriši privatne chatove (group chatovi su već obrađeni iznad)
+    final privateChatsSnap = await _db
+        .collection('chats')
+        .where('memberIds', arrayContains: userId)
+        .get();
+
+    for (final doc in privateChatsSnap.docs) {
+      final data = doc.data();
+      final isGroup = data['type'] == 'group' || data['isGroup'] == true;
+      if (!isGroup) {
+        await doc.reference.delete();
+      }
+    }
+
+    // 7. Obriši Firebase Auth nalog (mora biti poslednje)
+    await user.delete();
   }
 
   Future<String> generateChatId(String user1Id, String user2Id) async {

@@ -82,11 +82,11 @@ Future<void> _loadUsers() async {
   try {
     setState(() => _isLoadingUsers = true);
 
-    final allUsers = await _userService.getAllUsers();
+    final result = await _userService.getAllUsers();
 
     if (mounted) {
       setState(() {
-        _usersMap = {for (var user in allUsers) user.id: user};
+        _usersMap = {for (var user in result.users) user.id: user};
         _isLoadingUsers = false;
         _errorMessage = null;
       });

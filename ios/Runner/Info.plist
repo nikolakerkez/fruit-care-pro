@@ -32,9 +32,7 @@
 	<string>Potrebna nam je dozvola za dodavanje slika u galeriju</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Potrebna nam je pristup galeriji da biste mogli da šaljete slike</string>
-	<key>NSUserNotificationsUsageDescription</key>
-	<string>Dozvolite notifikacije da biste primali poruke u chatu</string>
-	<key>UIApplicationSupportsIndirectInputEvents</key>
+<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>
 	<array>

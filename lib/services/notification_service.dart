@@ -9,6 +9,9 @@ class NotificationService {
   static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   static RemoteMessage? _pendingInitialMessage;
 
+  // Prati koji chatovi imaju aktivne notifikacije → badge = broj takvih chatova
+  static final Set<String> _activeNotificationChats = {};
+
   static final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -41,7 +44,8 @@ class NotificationService {
         _saveTokenToFirestore(newToken);
       });
 
-      // Foreground notifications (iOS prikazuje automatski)
+      // iOS foreground — neka iOS sam prikazuje notifikacije
+      // flutter_local_notifications koristimo samo za Android
       await _messaging.setForegroundNotificationPresentationOptions(
         alert: true,
         badge: true,
@@ -143,6 +147,9 @@ static void handlePendingNotification() {
       requestAlertPermission: false, // iOS koristi Firebase permission
       requestBadgePermission: false,
       requestSoundPermission: false,
+      defaultPresentAlert: true,  // prikaži notifikaciju dok je app u foregroundu
+      defaultPresentBadge: true,
+      defaultPresentSound: true,
     );
 
     const InitializationSettings initSettings = InitializationSettings(
@@ -189,16 +196,21 @@ static void handlePendingNotification() {
     debugPrint('   Body: ${message.notification?.body}');
     debugPrint('   Data: ${message.data}');
 
-    // Prikaži lokalnu notifikaciju SAMO na Android-u
-    // iOS automatski prikazuje zbog setForegroundNotificationPresentationOptions
+    // Na iOS-u, sistem sam prikazuje notifikacije (alert: true gore)
+    // Na Android-u prikazujemo lokalnu notifikaciju jer sistem ne prikazuje automatski
     if (Platform.isAndroid && message.notification != null) {
       _showLocalNotification(message);
     }
   }
 
-  /// Prikaži local notification (samo Android)
+  /// Prikaži local notification (Android i iOS foreground)
   static Future<void> _showLocalNotification(RemoteMessage message) async {
     final String? chatId = message.data['chatId'] as String?;
+    final int notificationId = chatId?.hashCode ?? message.hashCode;
+
+    // Ažuriraj tracker i izračunaj novi badge broj
+    if (chatId != null) _activeNotificationChats.add(chatId);
+    final int badgeCount = _activeNotificationChats.length;
 
     const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
       'chat_messages',
@@ -211,26 +223,76 @@ static void handlePendingNotification() {
       icon: '@mipmap/ic_launcher',
     );
 
-    const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
+    final DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
       presentAlert: true,
       presentBadge: true,
       presentSound: true,
+      threadIdentifier: chatId,
+      badgeNumber: badgeCount, // badge = broj chatova sa aktivnim notifikacijama
     );
 
-    const NotificationDetails details = NotificationDetails(
+    final NotificationDetails details = NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,
     );
 
     await _localNotifications.show(
-      message.hashCode,
+      notificationId,
       message.notification?.title ?? 'Nova poruka',
       message.notification?.body ?? '',
       details,
       payload: chatId,
     );
 
-    debugPrint('✅ Local notification shown');
+    debugPrint('✅ Local notification shown (id: $notificationId)');
+  }
+
+  /// Obriši notifikacije za određeni chat (pozovi kada se otvori chat screen)
+  static Future<void> cancelNotificationsForChat(String chatId) async {
+    try {
+      _activeNotificationChats.remove(chatId);
+      await _localNotifications.cancel(chatId.hashCode);
+
+      if (Platform.isIOS) {
+        await _localNotifications.cancelAll();
+        await _resetBadge();
+      }
+
+      // Resetuj badge counter u Firestore-u
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        await _firestore.collection('users').doc(user.uid).update({
+          'badgeCount': 0,
+        });
+      }
+
+      debugPrint('✅ Notifications cancelled for chat: $chatId');
+    } catch (e) {
+      debugPrint('❌ Failed to cancel notifications for chat: $e');
+    }
+  }
+
+  /// Resetuje badge broj na app ikoni na 0 (samo iOS)
+  static Future<void> _resetBadge() async {
+    try {
+      const int badgeResetId = 99999;
+      await _localNotifications.show(
+        badgeResetId,
+        null,
+        null,
+        const NotificationDetails(
+          iOS: DarwinNotificationDetails(
+            presentAlert: false,
+            presentSound: false,
+            presentBadge: true,
+            badgeNumber: 0,
+          ),
+        ),
+      );
+      await _localNotifications.cancel(badgeResetId);
+    } catch (e) {
+      debugPrint('❌ Failed to reset badge: $e');
+    }
   }
 
   /// Handle notification tap
@@ -242,6 +304,33 @@ static void handlePendingNotification() {
 
     if (chatId != null) {
       onNotificationTap?.call(chatId, senderId);
+    }
+  }
+
+  /// Označi da je korisnik aktivan u određenom chatu
+  /// Cloud Function neće slati notifikacije za taj chat dok je aktivan
+  static Future<void> setActiveChat(String chatId) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+      await _firestore.collection('users').doc(user.uid).update({
+        'activeChatId': chatId,
+      });
+    } catch (e) {
+      debugPrint('❌ Failed to set activeChatId: $e');
+    }
+  }
+
+  /// Obriši aktivni chat (pozovi kad korisnik napusti chat)
+  static Future<void> clearActiveChat() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+      await _firestore.collection('users').doc(user.uid).update({
+        'activeChatId': FieldValue.delete(),
+      });
+    } catch (e) {
+      debugPrint('❌ Failed to clear activeChatId: $e');
     }
   }
 
