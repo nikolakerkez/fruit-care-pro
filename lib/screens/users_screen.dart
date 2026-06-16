@@ -167,19 +167,19 @@ class _UserListScreenState extends State<UserListScreen> {
         Navigator.pop(context);
         break;
       case 2:
-        Navigator.push(
+        Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => const FruitListPage()),
         );
         break;
       case 3:
-        Navigator.push(
+        Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => AdvertisementCategoriesScreen()),
         );
         break;
       case 4:
-        Navigator.push(
+        Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => UserDetailsScreen(userId: user?.id)),
         );

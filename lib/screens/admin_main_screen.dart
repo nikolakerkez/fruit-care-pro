@@ -149,10 +149,10 @@ Future<void> _loadUsers() async {
     ];
 
     if (index < routes.length) {
-      Navigator.push(
+      Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => routes[index]),
-      ).then((_) => _loadUsers());
+      );
     }
   }
 

@@ -106,7 +106,7 @@ class _UserMainScreenState extends State<UserMainScreen> {
     ];
 
     if (index < routes.length) {
-      Navigator.push(
+      Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => routes[index]()),
       );
@@ -285,7 +285,7 @@ class _ChatListTile extends StatelessWidget {
     if (chat.isGroup || chat.memberIds.isEmpty) {
       return chat.name ?? 'Nepoznat chat';
     }
-    return "Admin";
+    return chat.name ?? 'Admin';
   }
 
   String? _getThumbUrl() {

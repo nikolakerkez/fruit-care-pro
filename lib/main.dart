@@ -22,6 +22,8 @@ import 'package:fruit_care_pro/services/user_service.dart';
 import 'package:provider/provider.dart';
 import 'package:fruit_care_pro/user_notifier.dart';
 
+final RouteObserver<ModalRoute> routeObserver = RouteObserver<ModalRoute>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -109,6 +111,7 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: navigatorKey,
+      navigatorObservers: [routeObserver],
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         scaffoldBackgroundColor: const Color(0xFFF5F7F5),

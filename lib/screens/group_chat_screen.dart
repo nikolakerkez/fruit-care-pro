@@ -16,6 +16,7 @@ import 'package:fruit_care_pro/widgets/date_separator.dart';
 import 'package:fruit_care_pro/screens/message_info.dart';
 import 'package:fruit_care_pro/screens/full_screen_image_viewer.dart';
 import 'package:fruit_care_pro/services/notification_service.dart';
+import 'package:fruit_care_pro/main.dart' show routeObserver;
 
 class GroupChatScreen extends StatefulWidget {
   final String? chatId;
@@ -33,7 +34,8 @@ class GroupChatScreen extends StatefulWidget {
   State<GroupChatScreen> createState() => _GroupChatScreenState();
 }
 
-class _GroupChatScreenState extends State<GroupChatScreen> {
+class _GroupChatScreenState extends State<GroupChatScreen>
+    with WidgetsBindingObserver, RouteAware {
   // Services
   late final UserService _userService;
   late final ChatService _chatService;
@@ -69,8 +71,27 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   bool get _isAdmin => _currentUser?.isAdmin ?? false;
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    routeObserver.subscribe(this, ModalRoute.of(context)!);
+  }
+
+  @override
+  void didPopNext() {
+    if (_chatId.isNotEmpty) {
+      NotificationService.setActiveChat(_chatId);
+    }
+  }
+
+  @override
+  void didPushNext() {
+    NotificationService.clearActiveChat();
+  }
+
+  @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initializeScreen();
     Future.delayed(const Duration(seconds: 15), () {
       if (mounted && _isLoading) {
@@ -83,7 +104,19 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      NotificationService.clearActiveChat();
+    } else if (state == AppLifecycleState.resumed && _chatId.isNotEmpty) {
+      NotificationService.setActiveChat(_chatId);
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    routeObserver.unsubscribe(this);
     // Korisnik napušta chat — obriši activeChatId
     NotificationService.clearActiveChat();
 
@@ -133,6 +166,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
       // Load visibility cutoff for non-admin users
       await _loadMessagesVisibleFrom();
+
+      // Otkaži notifikacije za ovaj chat i umanji badge counter
+      NotificationService.cancelNotificationsForChat(_chatId);
 
       // Označi da je korisnik aktivan u ovom chatu → Cloud Function neće slati notifikacije
       NotificationService.setActiveChat(_chatId);

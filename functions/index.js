@@ -281,7 +281,10 @@ exports.sendChatNotification = onDocumentCreated(
           const userDoc = await t.get(userRef);
           const current = userDoc.data()?.badgeCount || 0;
           const next = current + 1;
-          t.update(userRef, { badgeCount: next });
+          t.update(userRef, {
+            badgeCount: next,
+            [`chatBadgeCounts.${chatId}`]: admin.firestore.FieldValue.increment(1),
+          });
           return next;
         });
 

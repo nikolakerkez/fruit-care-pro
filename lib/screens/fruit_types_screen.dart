@@ -132,7 +132,7 @@ class _FruitListPageState extends State<FruitListPage> {
     ];
 
     if (index < routes.length) {
-      Navigator.push(
+      Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => routes[index]),
       );

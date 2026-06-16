@@ -121,8 +121,10 @@ class ChatService {
       final chatDoc = await _db.collection('chats').doc(chatId).get();
 
       if (!chatDoc.exists) {
-        // Create new chat if it doesn't exist
-        await _createNewChat(chatId, senderId, receiverId);
+        // Fetchuj ime pošiljaoca za naziv chata (admin šalje korisniku)
+        final senderDoc = await _db.collection('users').doc(senderId).get();
+        final senderName = senderDoc.data()?['name'] as String? ?? 'Admin';
+        await _createNewChat(chatId, senderId, receiverId, senderName);
       }
 
       // Send image or text message
@@ -162,12 +164,14 @@ class ChatService {
     String chatId,
     String user1Id,
     String user2Id,
+    String senderName,
   ) async {
     try {
       await _db.collection('chats').doc(chatId).set({
         'user1Id': user1Id,
         'user2Id': user2Id,
         'memberIds': [user1Id, user2Id],
+        'name': senderName,
         'lastMessage': {
           'text': '',
           'timestamp': FieldValue.serverTimestamp(),

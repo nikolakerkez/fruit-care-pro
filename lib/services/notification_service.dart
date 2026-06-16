@@ -68,6 +68,10 @@ class NotificationService {
           debugPrint('📩 Initial message saved, waiting for app to be ready');
         }
 
+      // Obriši activeChatId pri svakom pokretanju app-a
+      // (može ostati ako je app ubijen dok je korisnik bio u chatu)
+      await clearActiveChat();
+
       debugPrint('✅ NotificationService initialized successfully');
     } catch (e, stackTrace) {
       debugPrint('❌ Failed to initialize NotificationService: $e');
@@ -254,16 +258,34 @@ static void handlePendingNotification() {
       await _localNotifications.cancel(chatId.hashCode);
 
       if (Platform.isIOS) {
-        await _localNotifications.cancelAll();
-        await _resetBadge();
+        await _localNotifications.cancel(chatId.hashCode);
       }
 
-      // Resetuj badge counter u Firestore-u
+      // Oduzmi notifikacije ovog chata od ukupnog badge countera
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        await _firestore.collection('users').doc(user.uid).update({
-          'badgeCount': 0,
+        final userRef = _firestore.collection('users').doc(user.uid);
+        int newCount = 0;
+        await _firestore.runTransaction((t) async {
+          final userDoc = await t.get(userRef);
+          final data = userDoc.data() ?? {};
+          final chatCounts = Map<String, dynamic>.from(
+            (data['chatBadgeCounts'] as Map<String, dynamic>?) ?? {},
+          );
+          // Ukloni ovaj chat i saberi preostale
+          chatCounts.remove(chatId);
+          newCount = chatCounts.values
+              .fold(0, (acc, v) => acc + ((v as num?)?.toInt() ?? 0));
+          t.update(userRef, {
+            'badgeCount': newCount,
+            'chatBadgeCounts.$chatId': FieldValue.delete(),
+          });
         });
+
+        // Osvoji badge na ikoni sa novim brojem
+        if (Platform.isIOS) {
+          await _updateBadge(newCount);
+        }
       }
 
       debugPrint('✅ Notifications cancelled for chat: $chatId');
@@ -272,26 +294,26 @@ static void handlePendingNotification() {
     }
   }
 
-  /// Resetuje badge broj na app ikoni na 0 (samo iOS)
-  static Future<void> _resetBadge() async {
+  /// Postavi badge broj na app ikoni (samo iOS)
+  static Future<void> _updateBadge(int count) async {
     try {
-      const int badgeResetId = 99999;
+      const int badgeUpdateId = 99999;
       await _localNotifications.show(
-        badgeResetId,
+        badgeUpdateId,
         null,
         null,
-        const NotificationDetails(
+        NotificationDetails(
           iOS: DarwinNotificationDetails(
             presentAlert: false,
             presentSound: false,
             presentBadge: true,
-            badgeNumber: 0,
+            badgeNumber: count,
           ),
         ),
       );
-      await _localNotifications.cancel(badgeResetId);
+      await _localNotifications.cancel(badgeUpdateId);
     } catch (e) {
-      debugPrint('❌ Failed to reset badge: $e');
+      debugPrint('❌ Failed to update badge: $e');
     }
   }
 

@@ -164,7 +164,7 @@ class _AdvertisementCategoriesState
     }
 
     if (destination != null) {
-      Navigator.push(
+      Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => destination!),
       );

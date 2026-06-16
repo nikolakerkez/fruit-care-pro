@@ -247,21 +247,21 @@ Future<void> _deleteAdvertisement(Advertisement ad) async {
     switch (index) {
       case 0:
         if (user?.isAdmin ?? false) {
-          Navigator.push(context,
+          Navigator.pushReplacement(context,
               MaterialPageRoute(builder: (context) => AdminMainScreen()));
         } else {
-          Navigator.push(context,
+          Navigator.pushReplacement(context,
               MaterialPageRoute(builder: (context) => UserMainScreen()));
         }
         break;
       case 1:
         if (user?.isAdmin ?? false) {
-          Navigator.push(
+          Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => const UserListScreen()),
           );
         } else {
-          Navigator.push(
+          Navigator.pushReplacement(
             context,
             MaterialPageRoute(
                 builder: (context) => const AdvertisementCategoriesScreen()),
@@ -270,12 +270,12 @@ Future<void> _deleteAdvertisement(Advertisement ad) async {
         break;
       case 2:
         if (user?.isAdmin ?? false) {
-          Navigator.push(
+          Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => const FruitListPage()),
           );
         } else {
-          Navigator.push(
+          Navigator.pushReplacement(
               context,
               MaterialPageRoute(
                 builder: (context) => UserDetailsScreen(userId: user?.id),
@@ -284,7 +284,7 @@ Future<void> _deleteAdvertisement(Advertisement ad) async {
         break;
       case 3:
         if (user?.isAdmin ?? false) {
-          Navigator.push(
+          Navigator.pushReplacement(
             context,
             MaterialPageRoute(
                 builder: (context) => const AdvertisementCategoriesScreen()),
@@ -293,7 +293,7 @@ Future<void> _deleteAdvertisement(Advertisement ad) async {
         break;
       case 4:
         if (user?.isAdmin ?? false) {
-          Navigator.push(
+          Navigator.pushReplacement(
             context,
             MaterialPageRoute(
                 builder: (context) => UserDetailsScreen(userId: user?.id)),
