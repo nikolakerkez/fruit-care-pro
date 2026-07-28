@@ -53,6 +53,10 @@ workflows:
       - name: Get Flutter packages
         script: |
           flutter pub get
+      - name: Install FlutterFire CLI
+        script: |
+          dart pub global activate flutterfire_cli
+          echo "PATH=$PATH:$HOME/.pub-cache/bin" >> $CM_ENV
       - name: Install pods
         script: |
           find . -name "Podfile" -execdir pod install \;
