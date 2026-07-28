@@ -4,6 +4,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class NotificationService {
   static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
@@ -15,6 +17,10 @@ class NotificationService {
   static final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  // Kanal ka native (Swift) strani za brisanje grupisanih iOS notifikacija
+  static const MethodChannel _iosChannel =
+      MethodChannel('com.fruitcarepro/notifications');
 
   // Callback za navigaciju kada se tapne notifikacija
   static Function(String chatId, String? senderId)? onNotificationTap;
@@ -196,27 +202,56 @@ static void handlePendingNotification() {
 
   /// Handle foreground messages
   static void _handleForegroundMessage(RemoteMessage message) {
-    debugPrint('📩 Foreground message: ${message.notification?.title}');
-    debugPrint('   Body: ${message.notification?.body}');
-    debugPrint('   Data: ${message.data}');
+    debugPrint('📩 Foreground message data: ${message.data}');
+    handleIncomingMessage(message);
+  }
 
-    // Na iOS-u, sistem sam prikazuje notifikacije (alert: true gore)
-    // Na Android-u prikazujemo lokalnu notifikaciju jer sistem ne prikazuje automatski
-    if (Platform.isAndroid && message.notification != null) {
-      _showLocalNotification(message);
+  /// Obradi dolaznu poruku (foreground ili background isolate).
+  /// iOS: OS sam prikazuje/grupiše native notifikaciju (aps.alert + thread-id).
+  /// Android: poruka je data-only, pa mi sami pravimo grupisanu notifikaciju.
+  static Future<void> handleIncomingMessage(RemoteMessage message) async {
+    if (Platform.isAndroid) {
+      // Osiguraj da kanal postoji i u ovoj (možda tek pokrenutoj) izolati
+      await _initializeLocalNotifications();
+      await _showLocalNotification(message);
     }
   }
 
-  /// Prikaži local notification (Android i iOS foreground)
+  /// Prikaži grupisanu Android notifikaciju: pojedinačna poruka + summary
+  /// ("N novih poruka") sa istim groupKey (chatId) - isto kao WhatsApp.
   static Future<void> _showLocalNotification(RemoteMessage message) async {
     final String? chatId = message.data['chatId'] as String?;
-    final int notificationId = chatId?.hashCode ?? message.hashCode;
+    final String? messageId = message.data['messageId'] as String?;
+    final String title = message.data['title'] as String? ?? 'Nova poruka';
+    final String body = message.data['body'] as String? ?? '';
 
-    // Ažuriraj tracker i izračunaj novi badge broj
-    if (chatId != null) _activeNotificationChats.add(chatId);
-    final int badgeCount = _activeNotificationChats.length;
+    if (chatId == null) return;
 
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+    _activeNotificationChats.add(chatId);
+
+    final prefs = await SharedPreferences.getInstance();
+    final String storageKey = 'chat_notifications_$chatId';
+    final List<String> storedLines =
+        prefs.getStringList('${storageKey}_lines') ?? [];
+    final List<String> storedIds =
+        prefs.getStringList('${storageKey}_ids') ?? [];
+
+    final int messageNotificationId =
+        (messageId ?? DateTime.now().millisecondsSinceEpoch.toString())
+                .hashCode &
+            0x7fffffff;
+    final int summaryNotificationId =
+        ('summary_$chatId').hashCode & 0x7fffffff;
+
+    storedLines.add(body);
+    if (storedLines.length > 10) storedLines.removeAt(0);
+    storedIds.add(messageNotificationId.toString());
+
+    await prefs.setStringList('${storageKey}_lines', storedLines);
+    await prefs.setStringList('${storageKey}_ids', storedIds);
+    await prefs.setInt('${storageKey}_summary_id', summaryNotificationId);
+
+    final AndroidNotificationDetails messageDetails = AndroidNotificationDetails(
       'chat_messages',
       'Poruke',
       channelDescription: 'Notifikacije za nove poruke',
@@ -225,40 +260,79 @@ static void handlePendingNotification() {
       playSound: true,
       enableVibration: true,
       icon: '@mipmap/ic_launcher',
-    );
-
-    final DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
-      presentAlert: true,
-      presentBadge: true,
-      presentSound: true,
-      threadIdentifier: chatId,
-      badgeNumber: badgeCount, // badge = broj chatova sa aktivnim notifikacijama
-    );
-
-    final NotificationDetails details = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
+      groupKey: chatId,
     );
 
     await _localNotifications.show(
-      notificationId,
-      message.notification?.title ?? 'Nova poruka',
-      message.notification?.body ?? '',
-      details,
+      messageNotificationId,
+      title,
+      body,
+      NotificationDetails(android: messageDetails),
       payload: chatId,
     );
 
-    debugPrint('✅ Local notification shown (id: $notificationId)');
+    final int count = storedLines.length;
+    final AndroidNotificationDetails summaryDetails = AndroidNotificationDetails(
+      'chat_messages',
+      'Poruke',
+      channelDescription: 'Notifikacije za nove poruke',
+      importance: Importance.high,
+      priority: Priority.high,
+      playSound: false,
+      icon: '@mipmap/ic_launcher',
+      groupKey: chatId,
+      setAsGroupSummary: true,
+      styleInformation: InboxStyleInformation(
+        storedLines,
+        contentTitle: '$count ${count == 1 ? 'nova poruka' : 'nove poruke'}',
+        summaryText: title,
+      ),
+    );
+
+    await _localNotifications.show(
+      summaryNotificationId,
+      title,
+      body,
+      NotificationDetails(android: summaryDetails),
+      payload: chatId,
+    );
+
+    debugPrint('✅ Grouped notification shown for chat: $chatId (count: $count)');
   }
 
   /// Obriši notifikacije za određeni chat (pozovi kada se otvori chat screen)
   static Future<void> cancelNotificationsForChat(String chatId) async {
     try {
       _activeNotificationChats.remove(chatId);
-      await _localNotifications.cancel(chatId.hashCode);
+
+      if (Platform.isAndroid) {
+        // Obriši sve pojedinačne notifikacije + summary za ovaj chat
+        final prefs = await SharedPreferences.getInstance();
+        final String storageKey = 'chat_notifications_$chatId';
+        final List<String> storedIds =
+            prefs.getStringList('${storageKey}_ids') ?? [];
+        for (final idStr in storedIds) {
+          final id = int.tryParse(idStr);
+          if (id != null) await _localNotifications.cancel(id);
+        }
+        final int? summaryId = prefs.getInt('${storageKey}_summary_id');
+        if (summaryId != null) await _localNotifications.cancel(summaryId);
+
+        await prefs.remove('${storageKey}_ids');
+        await prefs.remove('${storageKey}_lines');
+        await prefs.remove('${storageKey}_summary_id');
+      }
 
       if (Platform.isIOS) {
-        await _localNotifications.cancel(chatId.hashCode);
+        // Obriši sve OS-native (APNs) notifikacije sa istim thread-id (chatId)
+        try {
+          await _iosChannel.invokeMethod(
+            'clearNotificationsForThread',
+            {'chatId': chatId},
+          );
+        } catch (e) {
+          debugPrint('⚠️ Failed to clear iOS notifications for thread: $e');
+        }
       }
 
       // Oduzmi notifikacije ovog chata od ukupnog badge countera

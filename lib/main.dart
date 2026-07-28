@@ -58,7 +58,8 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  debugPrint('📩 Background message (main.dart): ${message.notification?.title}');
+  debugPrint('📩 Background message (main.dart): ${message.data}');
+  await NotificationService.handleIncomingMessage(message);
 }
 
 

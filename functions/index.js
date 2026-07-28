@@ -185,6 +185,7 @@ exports.sendChatNotification = onDocumentCreated(
     
     const message = snapshot.data();
     const chatId = event.params.chatId;
+    const messageId = event.params.messageId;
     const senderId = message.senderId;
     
     try {
@@ -290,30 +291,34 @@ exports.sendChatNotification = onDocumentCreated(
 
         return admin.messaging().send({
           token: token,
-          notification: {
-            title: notificationTitle,
-            body: notificationBody,
-          },
+          // Nema top-level "notification" polja - na Androidu se poruka tretira
+          // kao data-only i uvek stiže u onBackgroundMessage/onMessage handler,
+          // gde app sam pravi grupisanu notifikaciju (kao WhatsApp).
           data: {
             chatId: chatId,
             senderId: senderId,
+            messageId: messageId,
             type: 'chat_message',
+            title: notificationTitle,
+            body: notificationBody,
           },
           apns: {
             payload: {
               aps: {
+                // iOS i dalje prikazuje native alert (iz aps.alert), i grupiše
+                // ga u Notification Center-u po thread-id (= chatId).
+                alert: {
+                  title: notificationTitle,
+                  body: notificationBody,
+                },
                 sound: 'default',
                 badge: newBadgeCount,
-                'content-available': 1,
+                'thread-id': chatId,
               },
             },
           },
           android: {
             priority: 'high',
-            notification: {
-              sound: 'default',
-              channelId: 'chat_messages',
-            },
           },
         });
       });
