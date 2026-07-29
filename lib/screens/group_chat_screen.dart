@@ -109,7 +109,12 @@ class _GroupChatScreenState extends State<GroupChatScreen>
         state == AppLifecycleState.detached) {
       NotificationService.clearActiveChat();
     } else if (state == AppLifecycleState.resumed && _chatId.isNotEmpty) {
+      // App se vratio u foreground dok je ovaj chat i dalje na ekranu.
+      // initState se NE pokreće ponovo (widget nije uništen minimiziranjem),
+      // pa moramo ručno ponoviti ono što bi inače uradio _initializeScreen.
       NotificationService.setActiveChat(_chatId);
+      NotificationService.cancelNotificationsForChat(_chatId);
+      _markMessagesAsRead();
     }
   }
 

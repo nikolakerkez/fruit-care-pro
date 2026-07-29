@@ -141,8 +141,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       // App ide u background ili je ubijen — obriši activeChatId
       NotificationService.clearActiveChat();
     } else if (state == AppLifecycleState.resumed && _chatId.isNotEmpty) {
-      // App se vratio u foreground — postavi activeChatId ponovo
+      // App se vratio u foreground dok je ovaj chat i dalje na ekranu.
+      // initState se NE pokreće ponovo (widget nije uništen minimiziranjem),
+      // pa moramo ručno ponoviti ono što bi inače uradio _initializeScreen.
       NotificationService.setActiveChat(_chatId);
+      NotificationService.cancelNotificationsForChat(_chatId);
+      _markMessagesAsRead();
     }
   }
 
