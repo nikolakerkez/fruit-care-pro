@@ -25,6 +25,9 @@ android/local.properties
 android/**/*.iml
 android/**/*.apk
 android/**/*.so
+android/key.properties
+android/*.jks
+android/*.keystore
 
 # Firebase
 google-services.json

@@ -18,3 +18,17 @@ allprojects {
         mavenCentral()
     }
 }
+
+// Flutter očekuje da se svi build outputi nalaze pod <project_root>/build,
+// ne pod android/app/build - bez ovoga "flutter build" ne pronalazi .aab/.apk.
+rootProject.buildDir = "../build"
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+subprojects {
+    project.evaluationDependsOn(":app")
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}
