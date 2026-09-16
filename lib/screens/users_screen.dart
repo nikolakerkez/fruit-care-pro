@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:fruit_care_pro/screens/admin_main_screen.dart';
 import 'package:fruit_care_pro/screens/advertisement_categories_screen.dart';
 import 'package:fruit_care_pro/screens/fruit_types_screen.dart';
 import 'package:fruit_care_pro/models/user.dart';
@@ -164,7 +165,10 @@ class _UserListScreenState extends State<UserListScreen> {
 
     switch (index) {
       case 0:
-        Navigator.pop(context);
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const AdminMainScreen()),
+        );
         break;
       case 2:
         Navigator.pushReplacement(
