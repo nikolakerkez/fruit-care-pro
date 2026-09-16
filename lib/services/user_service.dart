@@ -34,6 +34,11 @@ class UserService {
       final userCredential = await _auth.signInWithEmailAndPassword(
         email: email.trim(),
         password: password,
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => throw LoginException(
+          'Prijava traje predugo. Proverite internet konekciju i pokušajte ponovo.',
+        ),
       );
 
       final user = userCredential.user;
@@ -42,10 +47,24 @@ class UserService {
       }
 
       // Force token refresh to ensure latest claims
-      await user.getIdToken(true);
+      await user.getIdToken(true).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw LoginException(
+          'Prijava traje predugo. Proverite internet konekciju i pokušajte ponovo.',
+        ),
+      );
 
       // Fetch user data from Firestore
-      final userDoc = await _db.collection('users').doc(user.uid).get();
+      final userDoc = await _db
+          .collection('users')
+          .doc(user.uid)
+          .get()
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => throw LoginException(
+              'Prijava traje predugo. Proverite internet konekciju i pokušajte ponovo.',
+            ),
+          );
 
       if (!userDoc.exists) {
         // User authenticated but has no Firestore document
@@ -61,6 +80,9 @@ class UserService {
 
       await NotificationService.saveTokenAfterLogin();
       return AppUser.fromFirestore(userData, user.uid, []);
+    } on LoginException {
+      // Već ima jasnu poruku (npr. iz timeout-a iznad) - ne umotavaj ponovo
+      rethrow;
     } on FirebaseAuthException catch (e) {
       // Handle specific Firebase Auth errors
       throw _handleFirebaseAuthError(e);
@@ -601,7 +623,16 @@ Future<String?> getAdminId() async {
   }
 
   Future<AppUser?> getUserById(String userId) async {
-    DocumentSnapshot userDoc = await _db.collection('users').doc(userId).get();
+    DocumentSnapshot userDoc = await _db
+        .collection('users')
+        .doc(userId)
+        .get()
+        .timeout(
+          const Duration(seconds: 10),
+          onTimeout: () => throw Exception(
+            'Timeout pri učitavanju korisničkih podataka (loša internet konekcija)',
+          ),
+        );
 
     if (userDoc.exists) {
       return AppUser.fromFirestore(

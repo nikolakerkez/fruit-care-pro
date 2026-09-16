@@ -107,6 +107,7 @@ void initState() {
       Provider.of<UserNotifier>(context, listen: false).setUser(appUser);
 
       CurrentUserService.instance.setCurrentUser(appUser);
+      await ErrorLogger.setUserId(appUser.id);
 
       // Navigate based on user status
       _navigateToNextScreen(appUser);

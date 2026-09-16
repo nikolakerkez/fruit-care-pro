@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:fruit_care_pro/exceptions/chat_exception.dart';
@@ -84,6 +85,21 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   bool _hasMoreData = true;
   String? _errorMessage;
 
+  // Reply/edit compose state
+  Map<String, dynamic>? _replyingTo; // {messageId, senderName, text}
+  String? _editingMessageId;
+
+  // Typing indicator
+  Timer? _typingTimer;
+  bool _otherUserTyping = false;
+
+  // Pretraga unutar chata
+  bool _isSearching = false;
+  final TextEditingController _searchController = TextEditingController();
+  List<QueryDocumentSnapshot<Map<String, dynamic>>>? _searchResults;
+  bool _isSearchLoading = false;
+  Timer? _searchDebounce;
+
   // Pagination
   DocumentSnapshot? _lastDocument;
   final List<List<DocumentSnapshot>> _allPagedResults = [<DocumentSnapshot>[]];
@@ -117,6 +133,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _messageController.addListener(_onTextChanged);
     _initializeScreen();
     Future.delayed(const Duration(seconds: 15), () {
       if (mounted && _isLoading) {
@@ -157,6 +174,18 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     // Korisnik napušta chat — obriši activeChatId
     NotificationService.clearActiveChat();
 
+    // Očisti typing status da ne ostane "zaglavljen"
+    _typingTimer?.cancel();
+    _searchDebounce?.cancel();
+    if (_chatId.isNotEmpty && _currentUserId.isNotEmpty) {
+      _chatService.setTypingStatus(
+        chatId: _chatId,
+        userId: _currentUserId,
+        isTyping: false,
+      );
+    }
+    _messageController.removeListener(_onTextChanged);
+
     // Cancel all subscriptions
     for (var subscription in _subscriptions) {
       subscription.cancel();
@@ -169,8 +198,37 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     // Dispose controllers
     _messageController.dispose();
     _scrollController.dispose();
+    _searchController.dispose();
 
     super.dispose();
+  }
+
+  /// Piše "kuca..." status u Firestore dok korisnik kuca, sa debounce-om
+  void _onTextChanged() {
+    if (_chatId.isEmpty || _currentUserId.isEmpty) return;
+
+    if (_messageController.text.trim().isNotEmpty) {
+      _typingTimer?.cancel();
+      _chatService.setTypingStatus(
+        chatId: _chatId,
+        userId: _currentUserId,
+        isTyping: true,
+      );
+      _typingTimer = Timer(const Duration(seconds: 3), () {
+        _chatService.setTypingStatus(
+          chatId: _chatId,
+          userId: _currentUserId,
+          isTyping: false,
+        );
+      });
+    } else {
+      _typingTimer?.cancel();
+      _chatService.setTypingStatus(
+        chatId: _chatId,
+        userId: _currentUserId,
+        isTyping: false,
+      );
+    }
   }
 
   // ==================== INITIALIZATION ====================
@@ -209,6 +267,20 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
 
       // Mark messages as read — non-critical, run in background
       _markMessagesAsRead();
+
+      // Prati "kuca..." status drugog korisnika
+      _subscriptions.add(
+        _chatService.watchChatDoc(_chatId).listen((data) {
+          if (!mounted) return;
+          final typing = data['typing'] as Map<String, dynamic>?;
+          final ts = typing?[_otherUserId] as Timestamp?;
+          final isTyping = ts != null &&
+              DateTime.now().difference(ts.toDate()) < const Duration(seconds: 8);
+          if (isTyping != _otherUserTyping) {
+            setState(() => _otherUserTyping = isTyping);
+          }
+        }),
+      );
 
       // Setup scroll listener for pagination
       _setupScrollListener();
@@ -424,15 +496,22 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
 
   // ==================== MESSAGE SENDING ====================
 
-  /// Send text message
+  /// Send text message (ili sačuvaj izmenu ako je u edit modu)
   Future<void> _sendTextMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
+    if (_editingMessageId != null) {
+      await _saveEditedMessage(text);
+      return;
+    }
+
     _messageController.clear();
+    final replyTo = _replyingTo;
+    setState(() => _replyingTo = null);
 
     try {
-      await _sendMessage(messageText: text);
+      await _sendMessage(messageText: text, replyTo: replyTo);
     } on SendMessageException catch (e) {
       if (!mounted) return;
 
@@ -455,6 +534,181 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Greška pri slanju poruke'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// Sačuvaj izmenjen tekst poruke
+  Future<void> _saveEditedMessage(String newText) async {
+    final messageId = _editingMessageId;
+    if (messageId == null) return;
+
+    _messageController.clear();
+    setState(() => _editingMessageId = null);
+
+    try {
+      await _chatService.editMessage(
+        chatId: _chatId,
+        messageId: messageId,
+        newText: newText,
+      );
+    } on SendMessageException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+      );
+    } catch (e, stackTrace) {
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Failed to edit message',
+        screen: 'PrivateChatScreen',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Greška pri izmeni poruke'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// Prikaži bottom sheet sa akcijama nad porukom (long-press)
+  void _showMessageActions(String messageId, Map<String, dynamic> data) {
+    if (data['isDeleted'] == true) return;
+
+    final isOwn = data['senderId'] == _currentUserId;
+    final isText = (data['message'] as String?)?.isNotEmpty ?? false;
+    final isImage = data['thumbUrl'] != null || data['imageUrl'] != null;
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Wrap(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.reply),
+                title: const Text('Odgovori'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _startReply(messageId, data);
+                },
+              ),
+              if (isText)
+                ListTile(
+                  leading: const Icon(Icons.copy),
+                  title: const Text('Kopiraj tekst'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Clipboard.setData(ClipboardData(text: data['message'] as String));
+                  },
+                ),
+              if (isOwn && isText && !isImage)
+                ListTile(
+                  leading: const Icon(Icons.edit_outlined),
+                  title: const Text('Izmeni'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _startEdit(messageId, data['message'] as String);
+                  },
+                ),
+              if (isOwn)
+                ListTile(
+                  leading: const Icon(Icons.delete_outline, color: Colors.red),
+                  title: const Text('Obriši za sve', style: TextStyle(color: Colors.red)),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _deleteMessage(messageId, forEveryone: true);
+                  },
+                ),
+              ListTile(
+                leading: const Icon(Icons.delete_sweep_outlined),
+                title: const Text('Obriši za mene'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _deleteMessage(messageId, forEveryone: false);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Postavi poruku na koju se odgovara
+  void _startReply(String messageId, Map<String, dynamic> data) {
+    final isImage = data['thumbUrl'] != null || data['imageUrl'] != null;
+    final senderName = data['senderId'] == _currentUserId
+        ? 'Ti'
+        : (_otherUser?.name ?? 'Korisnik');
+
+    setState(() {
+      _editingMessageId = null;
+      _replyingTo = {
+        'messageId': messageId,
+        'senderName': senderName,
+        'text': isImage ? '📷 Slika' : (data['message'] as String? ?? ''),
+      };
+    });
+  }
+
+  /// Uđi u edit mod za sopstvenu poruku
+  void _startEdit(String messageId, String currentText) {
+    setState(() {
+      _replyingTo = null;
+      _editingMessageId = messageId;
+      _messageController.text = currentText;
+      _messageController.selection = TextSelection.collapsed(offset: currentText.length);
+    });
+  }
+
+  /// Otkaži reply/edit stanje
+  void _cancelComposerState() {
+    setState(() {
+      _replyingTo = null;
+      if (_editingMessageId != null) {
+        _editingMessageId = null;
+        _messageController.clear();
+      }
+    });
+  }
+
+  /// Obriši poruku (za sve ili samo za mene)
+  Future<void> _deleteMessage(String messageId, {required bool forEveryone}) async {
+    try {
+      if (forEveryone) {
+        await _chatService.deleteMessageForEveryone(chatId: _chatId, messageId: messageId);
+      } else {
+        await _chatService.deleteMessageForMe(
+          chatId: _chatId,
+          messageId: messageId,
+          userId: _currentUserId,
+        );
+      }
+    } on SendMessageException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+      );
+    } catch (e, stackTrace) {
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Failed to delete message',
+        screen: 'PrivateChatScreen',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Greška pri brisanju poruke'),
           backgroundColor: Colors.red,
         ),
       );
@@ -508,18 +762,31 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   }
 
   /// Send message to chat
-  Future<void> _sendMessage({String? messageText, String? imageUrl}) async {
+  Future<void> _sendMessage({
+    String? messageText,
+    String? imageUrl,
+    Map<String, dynamic>? replyTo,
+  }) async {
     if (_chatId.isEmpty || _otherUserId.isEmpty) return;
 
     final message = messageText ?? imageUrl ?? '';
 
-    await _chatService.sendMessage(
-      _chatId,
-      _currentUserId,
-      _otherUserId,
-      message,
-      null,
-    );
+    if (replyTo != null) {
+      await _chatService.sendMessageToChat(
+        chatId: _chatId,
+        senderId: _currentUserId,
+        messageText: message,
+        replyTo: replyTo,
+      );
+    } else {
+      await _chatService.sendMessage(
+        _chatId,
+        _currentUserId,
+        _otherUserId,
+        message,
+        null,
+      );
+    }
   }
 
   // ==================== NAVIGATION ====================
@@ -570,8 +837,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
       appBar: _buildAppBar(),
       body: Column(
         children: [
-          Expanded(child: _buildMessagesList()),
-          _buildMessageInput(),
+          Expanded(child: _isSearching ? _buildSearchResults() : _buildMessagesList()),
+          if (!_isSearching) _buildMessageInput(),
         ],
       ),
     );
@@ -611,7 +878,13 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
       centerTitle: false,
-      title: _buildAppBarTitle(),
+      title: _isSearching ? _buildSearchField() : _buildAppBarTitle(),
+      actions: [
+        IconButton(
+          icon: Icon(_isSearching ? Icons.close : Icons.search),
+          onPressed: _toggleSearch,
+        ),
+      ],
       bottom: const PreferredSize(
         preferredSize: Size.fromHeight(2),
         child: ColoredBox(
@@ -637,13 +910,150 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
         const SizedBox(width: 8),
         GestureDetector(
           onTap: () => _navigateToUserDetails(_otherUserId),
-          child: Text(
-            displayName,
-            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                displayName,
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              if (_otherUserTyping)
+                const Text(
+                  'kuca...',
+                  style: TextStyle(color: Colors.white70, fontSize: 12, fontStyle: FontStyle.italic),
+                ),
+            ],
           ),
         ),
       ],
     );
+  }
+
+  /// Search input field prikazan u app bar-u dok je pretraga aktivna
+  Widget _buildSearchField() {
+    return TextField(
+      controller: _searchController,
+      autofocus: true,
+      style: const TextStyle(color: Colors.white),
+      cursorColor: Colors.white,
+      decoration: const InputDecoration(
+        hintText: 'Pretraži poruke...',
+        hintStyle: TextStyle(color: Colors.white70),
+        border: InputBorder.none,
+      ),
+      onChanged: _onSearchQueryChanged,
+    );
+  }
+
+  /// Uključi/isključi pretragu
+  void _toggleSearch() {
+    setState(() {
+      _isSearching = !_isSearching;
+      if (!_isSearching) {
+        _searchController.clear();
+        _searchResults = null;
+        _searchDebounce?.cancel();
+      }
+    });
+  }
+
+  /// Debounce-ovana pretraga poruka dok korisnik kuca
+  void _onSearchQueryChanged(String query) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 400), () async {
+      final trimmed = query.trim();
+      if (trimmed.isEmpty) {
+        if (mounted) setState(() => _searchResults = null);
+        return;
+      }
+
+      if (mounted) setState(() => _isSearchLoading = true);
+      final results = await _chatService.searchMessages(chatId: _chatId, query: trimmed);
+      if (!mounted) return;
+      setState(() {
+        _searchResults = results;
+        _isSearchLoading = false;
+      });
+    });
+  }
+
+  /// Lista rezultata pretrage
+  Widget _buildSearchResults() {
+    if (_isSearchLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_searchResults == null) {
+      return const Center(child: Text('Ukucaj tekst za pretragu poruka.'));
+    }
+    if (_searchResults!.isEmpty) {
+      return const Center(child: Text('Nema rezultata.'));
+    }
+
+    final query = _searchController.text.trim();
+
+    return ListView.builder(
+      itemCount: _searchResults!.length,
+      itemBuilder: (context, index) {
+        final data = _searchResults![index].data();
+        final text = data['message'] as String? ?? '';
+        final timestamp = data['timestamp'] as Timestamp?;
+        final isMine = data['senderId'] == _currentUserId;
+
+        return ListTile(
+          leading: CircleAvatar(
+            backgroundColor: const Color(0xFF2E7D52),
+            child: Icon(
+              isMine ? Icons.person : Icons.person_outline,
+              color: Colors.white,
+              size: 18,
+            ),
+          ),
+          title: _buildHighlightedText(text, query),
+          subtitle: timestamp != null ? Text(_formatSearchTimestamp(timestamp.toDate())) : null,
+          onTap: () => setState(() => _isSearching = false),
+        );
+      },
+    );
+  }
+
+  /// Tekst sa podebljanim/istaknutim delom koji se poklapa sa pretragom
+  Widget _buildHighlightedText(String text, String query) {
+    if (query.isEmpty) {
+      return Text(text, maxLines: 2, overflow: TextOverflow.ellipsis);
+    }
+
+    final lowerText = text.toLowerCase();
+    final lowerQuery = query.toLowerCase();
+    final index = lowerText.indexOf(lowerQuery);
+
+    if (index == -1) {
+      return Text(text, maxLines: 2, overflow: TextOverflow.ellipsis);
+    }
+
+    return RichText(
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      text: TextSpan(
+        style: const TextStyle(color: Colors.black87, fontSize: 14),
+        children: [
+          TextSpan(text: text.substring(0, index)),
+          TextSpan(
+            text: text.substring(index, index + query.length),
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              backgroundColor: Color(0xFFFFF3B0),
+            ),
+          ),
+          TextSpan(text: text.substring(index + query.length)),
+        ],
+      ),
+    );
+  }
+
+  String _formatSearchTimestamp(DateTime date) {
+    String pad(int n) => n.toString().padLeft(2, '0');
+    return '${pad(date.day)}.${pad(date.month)}.${date.year}. ${pad(date.hour)}:${pad(date.minute)}';
   }
 
   /// Build avatar
@@ -685,7 +1095,16 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
           return const Center(child: Text('Započnite razgovor.'));
         }
 
-        final messages = snapshot.data!;
+        // Sakrij poruke koje je trenutni korisnik obrisao "za mene"
+        final messages = snapshot.data!.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          final hiddenFor = List<String>.from(data['hiddenFor'] ?? const []);
+          return !hiddenFor.contains(_currentUserId);
+        }).toList();
+
+        if (messages.isEmpty) {
+          return const Center(child: Text('Započnite razgovor.'));
+        }
 
         return ListView.builder(
           controller: _scrollController,
@@ -702,14 +1121,17 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                   DateSeparator(
                     timestamp: messageData['timestamp'] as Timestamp?,
                   ),
-                ChatBubble(
-                  messageData: messageData,
-                  isCurrentUser: messageData['senderId'] == _currentUserId,
-                  otherUserId: _otherUserId,
-                  onImageTap: () => _navigateToImageViewer(
-                    messageData['imageUrl'] ?? messageData['thumbUrl'],
-                    messageData['localImagePath'],
-                    messageData['messageId'],
+                GestureDetector(
+                  onLongPress: () => _showMessageActions(messageDoc.id, messageData),
+                  child: ChatBubble(
+                    messageData: messageData,
+                    isCurrentUser: messageData['senderId'] == _currentUserId,
+                    otherUserId: _otherUserId,
+                    onImageTap: () => _navigateToImageViewer(
+                      messageData['imageUrl'] ?? messageData['thumbUrl'],
+                      messageData['localImagePath'],
+                      messageDoc.id,
+                    ),
                   ),
                 ),
               ],
@@ -751,28 +1173,77 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
     final isPremium = _isAdmin ? true : (_currentUser?.isPremium ?? false);
 
     return SafeArea(
-      child: Opacity(
-        opacity: isPremium ? 1.0 : 0.6,
-        child: AbsorbPointer(
-          absorbing: !isPremium,
-          child: Container(
-            color: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: generateTextField(
-                    labelText: isPremium ? 'Unesite poruku' : 'Niste premium korisnik',
-                    controller: _messageController,
-                  ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_replyingTo != null || _editingMessageId != null) _buildComposerStateBar(),
+          Opacity(
+            opacity: isPremium ? 1.0 : 0.6,
+            child: AbsorbPointer(
+              absorbing: !isPremium,
+              child: Container(
+                color: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: generateTextField(
+                        labelText: isPremium ? 'Unesite poruku' : 'Niste premium korisnik',
+                        controller: _messageController,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    _buildInputButton(Icons.image_outlined, isPremium ? _sendImageMessage : () {}),
+                    _buildInputButton(
+                      _editingMessageId != null ? Icons.check : Icons.send_rounded,
+                      isPremium ? _sendTextMessage : () {},
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 4),
-                _buildInputButton(Icons.image_outlined, isPremium ? _sendImageMessage : () {}),
-                _buildInputButton(Icons.send_rounded, isPremium ? _sendTextMessage : () {}),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Traka iznad input polja koja prikazuje reply/edit kontekst
+  Widget _buildComposerStateBar() {
+    final isEditing = _editingMessageId != null;
+    final title = isEditing ? 'Izmena poruke' : 'Odgovaraš: ${_replyingTo?['senderName'] ?? ''}';
+    final subtitle = isEditing ? null : (_replyingTo?['text'] as String?);
+
+    return Container(
+      color: const Color(0xFFF0F0F0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        children: [
+          Icon(isEditing ? Icons.edit_outlined : Icons.reply, size: 18, color: const Color(0xFF2E7D52)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF2E7D52)),
+                ),
+                if (subtitle != null && subtitle.isNotEmpty)
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
               ],
             ),
           ),
-        ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 18),
+            onPressed: _cancelComposerState,
+          ),
+        ],
       ),
     );
   }

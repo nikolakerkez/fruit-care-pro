@@ -11,6 +11,7 @@ import 'package:fruit_care_pro/screens/user_main_screen.dart';
 import 'package:fruit_care_pro/services/notification_service.dart';
 import 'package:fruit_care_pro/services/user_service.dart';
 import 'package:fruit_care_pro/user_notifier.dart';
+import 'package:fruit_care_pro/utils/error_logger.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -51,6 +52,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
       Provider.of<UserNotifier>(context, listen: false).setUser(appUser);
       CurrentUserService.instance.setCurrentUser(appUser);
+      await ErrorLogger.setUserId(appUser.id);
 
       await NotificationService.saveTokenAfterLogin();
 
@@ -60,8 +62,15 @@ class _SplashScreenState extends State<SplashScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         NotificationService.handlePendingNotification();
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('❌ SplashScreen auth check error: $e');
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Splash auto-login failed',
+        screen: 'SplashScreen',
+        additionalData: {'userId': firebaseUser.uid},
+      );
       if (mounted) _goToLogin();
     }
   }

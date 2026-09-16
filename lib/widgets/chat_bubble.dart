@@ -20,6 +20,10 @@ class ChatBubble extends StatelessWidget {
 
    @override
   Widget build(BuildContext context) {
+    if (_isDeleted) {
+      return _buildDeletedPlaceholder(context);
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 10.0),
       child: Row(
@@ -59,6 +63,7 @@ class ChatBubble extends StatelessWidget {
                       ? CrossAxisAlignment.end
                       : CrossAxisAlignment.start,
                   children: [
+                    if (_replyTo != null) _buildReplyQuote(),
                     if (_hasImage) _buildImage(),
                     if (_hasText) ...[
                       if (_hasImage) const SizedBox(height: 8),
@@ -77,11 +82,99 @@ class ChatBubble extends StatelessWidget {
   }
 
   bool get _hasImage =>
-      messageData['thumbUrl'] != null || 
+      messageData['thumbUrl'] != null ||
       messageData['localImagePath'] != null ||
       messageData['isUploading'] == true;
 
   bool get _hasText => (messageData['message'] as String?)?.isNotEmpty ?? false;
+
+  bool get _isDeleted => messageData['isDeleted'] == true;
+
+  bool get _isEdited => messageData['isEdited'] == true;
+
+  Map<String, dynamic>? get _replyTo =>
+      messageData['replyTo'] as Map<String, dynamic>?;
+
+  Widget _buildDeletedPlaceholder(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 10.0),
+      child: Row(
+        mainAxisAlignment:
+            isCurrentUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.block, size: 15, color: Colors.grey[600]),
+                const SizedBox(width: 6),
+                Text(
+                  'Poruka je obrisana',
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontStyle: FontStyle.italic,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReplyQuote() {
+    final replyTo = _replyTo!;
+    final senderName = replyTo['senderName'] as String? ?? '';
+    final text = replyTo['text'] as String? ?? '';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: isCurrentUser
+            ? Colors.white.withValues(alpha: 0.15)
+            : Colors.black.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(6),
+        border: Border(
+          left: BorderSide(
+            color: isCurrentUser ? Colors.white70 : const Color(0xFF2E7D52),
+            width: 3,
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            senderName,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: isCurrentUser ? Colors.white : const Color(0xFF2E7D52),
+            ),
+          ),
+          Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              color: isCurrentUser
+                  ? Colors.white.withValues(alpha: 0.85)
+                  : Colors.black54,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
 Widget _buildImage() {
   final isUploading = messageData['isUploading'] ?? false;
@@ -268,6 +361,16 @@ Widget _buildImageWidget() {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (_isEdited) ...[
+          Text(
+            'izmenjeno · ',
+            style: TextStyle(
+              color: isCurrentUser ? Colors.white.withValues(alpha: 0.7) : Colors.black45,
+              fontSize: 11,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
         Text(
           formattedTime,
           style: TextStyle(

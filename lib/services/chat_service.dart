@@ -207,6 +207,7 @@ class ChatService {
     required String messageText,
     String? imageUrl,
     String? thumbUrl,
+    Map<String, dynamic>? replyTo,
   }) async {
     try {
       debugPrint('📤 Sending text message to chat: $chatId');
@@ -247,6 +248,7 @@ class ChatService {
           'thumbUrl': thumbUrl,
           'timestamp': timestamp,
           'readBy': readByMap,
+          if (replyTo != null) 'replyTo': replyTo,
         });
 
         // Update chat document
@@ -766,6 +768,275 @@ class ChatService {
         },
       );
       // Don't throw - this is non-critical
+    }
+  }
+
+  /// Izmeni tekst već poslate poruke (samo tekstualne poruke, samo pošiljalac
+  /// sme ovo da radi - proveru dozvole radi UI pre poziva)
+  Future<void> editMessage({
+    required String chatId,
+    required String messageId,
+    required String newText,
+  }) async {
+    try {
+      if (chatId.isEmpty || messageId.isEmpty) {
+        throw SendMessageException('Chat ID i message ID su obavezni');
+      }
+
+      final trimmed = newText.trim();
+      if (trimmed.isEmpty) {
+        throw SendMessageException('Poruka ne može biti prazna');
+      }
+
+      await _db
+          .collection('chats')
+          .doc(chatId)
+          .collection('messages')
+          .doc(messageId)
+          .update({
+        'message': trimmed,
+        'isEdited': true,
+        'editedAt': FieldValue.serverTimestamp(),
+      });
+
+      await _updateChatPreviewIfLastMessage(
+        chatId: chatId,
+        messageId: messageId,
+        newText: trimmed,
+      );
+
+      debugPrint('✅ Message edited: $messageId');
+    } on SendMessageException {
+      rethrow;
+    } catch (e, stackTrace) {
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Failed to edit message',
+        screen: 'ChatService.editMessage',
+        additionalData: {'chat_id': chatId, 'message_id': messageId},
+      );
+      throw SendMessageException('Greška pri izmeni poruke');
+    }
+  }
+
+  /// Obriši poruku za sve učesnike chata (sadržaj se zamenjuje placeholderom).
+  /// Dozvolu (samo pošiljalac) proverava UI pre poziva.
+  Future<void> deleteMessageForEveryone({
+    required String chatId,
+    required String messageId,
+  }) async {
+    try {
+      if (chatId.isEmpty || messageId.isEmpty) {
+        throw SendMessageException('Chat ID i message ID su obavezni');
+      }
+
+      final messageRef = _db
+          .collection('chats')
+          .doc(chatId)
+          .collection('messages')
+          .doc(messageId);
+
+      // Obriši i fajlove sa Storage-a (ako poruka ima sliku) da ne ostanu
+      // "siročad" koji zauzimaju prostor
+      final messageSnapshot = await messageRef.get();
+      final messageData = messageSnapshot.data();
+      final imagePath = messageData?['imagePath'] as String?;
+      final thumbPath = messageData?['thumbPath'] as String?;
+
+      if (imagePath != null || thumbPath != null) {
+        final storage = FirebaseStorage.instance;
+        await Future.wait([
+          if (imagePath != null)
+            storage.ref(imagePath).delete().catchError((e) {
+              debugPrint('⚠️ Failed to delete full image from storage: $e');
+            }),
+          if (thumbPath != null)
+            storage.ref(thumbPath).delete().catchError((e) {
+              debugPrint('⚠️ Failed to delete thumbnail from storage: $e');
+            }),
+        ]);
+      }
+
+      await messageRef.update({
+        'isDeleted': true,
+        'deletedAt': FieldValue.serverTimestamp(),
+        'message': '',
+        'imageUrl': null,
+        'thumbUrl': null,
+        'imagePath': null,
+        'thumbPath': null,
+        'replyTo': FieldValue.delete(),
+      });
+
+      await _updateChatPreviewIfLastMessage(
+        chatId: chatId,
+        messageId: messageId,
+        newText: '🚫 Poruka je obrisana',
+      );
+
+      debugPrint('✅ Message deleted for everyone: $messageId');
+    } on SendMessageException {
+      rethrow;
+    } catch (e, stackTrace) {
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Failed to delete message for everyone',
+        screen: 'ChatService.deleteMessageForEveryone',
+        additionalData: {'chat_id': chatId, 'message_id': messageId},
+      );
+      throw SendMessageException('Greška pri brisanju poruke');
+    }
+  }
+
+  /// Sakrij poruku samo za trenutnog korisnika (ostali učesnici je i dalje vide)
+  Future<void> deleteMessageForMe({
+    required String chatId,
+    required String messageId,
+    required String userId,
+  }) async {
+    try {
+      if (chatId.isEmpty || messageId.isEmpty || userId.isEmpty) {
+        throw SendMessageException(
+          'Chat ID, message ID i user ID su obavezni',
+        );
+      }
+
+      await _db
+          .collection('chats')
+          .doc(chatId)
+          .collection('messages')
+          .doc(messageId)
+          .update({
+        'hiddenFor': FieldValue.arrayUnion([userId]),
+      });
+
+      debugPrint('✅ Message hidden for user $userId: $messageId');
+    } on SendMessageException {
+      rethrow;
+    } catch (e, stackTrace) {
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Failed to delete message for me',
+        screen: 'ChatService.deleteMessageForMe',
+        additionalData: {
+          'chat_id': chatId,
+          'message_id': messageId,
+          'user_id': userId,
+        },
+      );
+      throw SendMessageException('Greška pri brisanju poruke');
+    }
+  }
+
+  /// Ako je izmenjena/obrisana poruka trenutno "lastMessage" u chat dokumentu,
+  /// ažuriraj i taj preview tekst (koji se prikazuje u listi četova) da ne
+  /// ostane zastareo. Poredi se po timestamp-u jer lastMessage ne čuva ID
+  /// poruke. Ne baca grešku dalje - ovo je samo kozmetička sinhronizacija,
+  /// glavna operacija (edit/delete) je već upisana.
+  Future<void> _updateChatPreviewIfLastMessage({
+    required String chatId,
+    required String messageId,
+    required String newText,
+  }) async {
+    try {
+      final chatRef = _db.collection('chats').doc(chatId);
+      final chatDoc = await chatRef.get();
+      final lastMessage = chatDoc.data()?['lastMessage'] as Map<String, dynamic>?;
+      final lastTimestamp = lastMessage?['timestamp'] as Timestamp?;
+      if (lastTimestamp == null) return;
+
+      final messageDoc = await _db
+          .collection('chats')
+          .doc(chatId)
+          .collection('messages')
+          .doc(messageId)
+          .get();
+      final messageTimestamp = messageDoc.data()?['timestamp'] as Timestamp?;
+
+      if (messageTimestamp != null && messageTimestamp == lastTimestamp) {
+        await chatRef.update({'lastMessage.text': newText});
+        debugPrint('✅ Chat list preview synced for chat: $chatId');
+      }
+    } catch (e, stackTrace) {
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Failed to sync chat list preview after edit/delete',
+        screen: 'ChatService._updateChatPreviewIfLastMessage',
+        additionalData: {'chat_id': chatId, 'message_id': messageId},
+      );
+      // Non-critical - ne prekidaj glavnu operaciju zbog ovoga
+    }
+  }
+
+  /// Postavi/skloni "kuca..." status za korisnika u chatu (privremeno polje
+  /// na chat dokumentu). Nekritično - ne sme da ruši chat funkcionalnost.
+  Future<void> setTypingStatus({
+    required String chatId,
+    required String userId,
+    required bool isTyping,
+  }) async {
+    if (chatId.isEmpty || userId.isEmpty) return;
+    try {
+      final chatRef = _db.collection('chats').doc(chatId);
+      if (isTyping) {
+        await chatRef.update({'typing.$userId': FieldValue.serverTimestamp()});
+      } else {
+        await chatRef.update({'typing.$userId': FieldValue.delete()});
+      }
+    } catch (e) {
+      debugPrint('⚠️ Failed to update typing status: $e');
+    }
+  }
+
+  /// Stream izmena na chat dokumentu (koristi se za typing indikator)
+  Stream<Map<String, dynamic>> watchChatDoc(String chatId) {
+    return _db
+        .collection('chats')
+        .doc(chatId)
+        .snapshots()
+        .map((doc) => doc.data() ?? <String, dynamic>{});
+  }
+
+  /// Pretraži poruke u chatu koje sadrže dati tekst (case-insensitive).
+  /// Firestore nema native full-text search, pa se filtrira na klijentu
+  /// nad poslednjih [limit] poruka (dovoljno za realnu veličinu chata).
+  Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> searchMessages({
+    required String chatId,
+    required String query,
+    int limit = 500,
+  }) async {
+    try {
+      if (chatId.isEmpty || query.trim().isEmpty) return [];
+
+      final snapshot = await _db
+          .collection('chats')
+          .doc(chatId)
+          .collection('messages')
+          .orderBy('timestamp', descending: true)
+          .limit(limit)
+          .get();
+
+      final lowerQuery = query.trim().toLowerCase();
+
+      return snapshot.docs.where((doc) {
+        final data = doc.data();
+        if (data['isDeleted'] == true) return false;
+        final text = (data['message'] as String?)?.toLowerCase() ?? '';
+        return text.contains(lowerQuery);
+      }).toList();
+    } catch (e, stackTrace) {
+      await ErrorLogger.logError(
+        e,
+        stackTrace,
+        reason: 'Failed to search messages',
+        screen: 'ChatService.searchMessages',
+        additionalData: {'chat_id': chatId},
+      );
+      return [];
     }
   }
 }
