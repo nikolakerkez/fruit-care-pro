@@ -1,0 +1,115 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+
+    function isChatMember(chatId) {
+      return isSignedIn() &&
+        request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds;
+    }
+
+    // ── users ───────────────────────────────────────────────────────────
+    // Readable by any signed-in user: names/avatars are shown across chats,
+    // read receipts, and chat lists for every participant, not just admin.
+    match /users/{userId} {
+      allow read: if isSignedIn();
+
+      // Accounts are created server-side only (Cloud Function, Admin SDK),
+      // never directly by a client.
+      allow create: if false;
+
+      allow update: if isAdmin() ||
+        (
+          isSignedIn() && request.auth.uid == userId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'fcmToken', 'lastTokenUpdate', 'badgeCount', 'chatBadgeCounts',
+            'activeChatId', 'isPasswordChangeNeeded', 'passwordLastChanged',
+            'imageUrl', 'thumbUrl', 'imagePath', 'thumbPath', 'localImagePath',
+            'city', 'phone',
+          ])
+        );
+
+      // Self-delete only (account deletion flow); admin has no "delete other
+      // user" feature in the app today.
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // ── fruit_types (master list of "voćne vrste") ─────────────────────
+    match /fruit_types/{fruitTypeId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ── user_2_fruittypes (which users grow which fruit types) ─────────
+    // Assignment is admin-managed only (the UI already disables this for
+    // regular users; this closes the same gap server-side).
+    match /user_2_fruittypes/{assocId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ── advertisements & categories ─────────────────────────────────────
+    match /advertisement_categories/{categoryId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /advertisements/{adId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ── chats ────────────────────────────────────────────────────────────
+    match /chats/{chatId} {
+      allow read: if isSignedIn() && request.auth.uid in resource.data.memberIds;
+
+      // Starting a new chat: you must include yourself as a member.
+      allow create: if isSignedIn() && request.auth.uid in request.resource.data.memberIds;
+
+      // Any member can update chat metadata (lastMessage, typing, etc.),
+      // but only admin can change who belongs to the chat.
+      allow update: if isSignedIn() && request.auth.uid in resource.data.memberIds &&
+        (
+          request.resource.data.memberIds == resource.data.memberIds ||
+          isAdmin()
+        );
+
+      allow delete: if isAdmin();
+
+      match /members/{memberId} {
+        // Sending a message fans out lastMessage/unreadCount updates to
+        // every member doc in the chat, so any member needs access to all
+        // member subdocuments here, not just their own.
+        allow read, write: if isChatMember(chatId);
+      }
+
+      match /messages/{messageId} {
+        allow read: if isChatMember(chatId);
+
+        allow create: if isChatMember(chatId) &&
+          request.resource.data.senderId == request.auth.uid;
+
+        // The sender can freely edit/delete their own message (also covers
+        // background image-upload progress updates). Other members may only
+        // touch read-receipt / hidden-for-me fields, never message content.
+        allow update: if isChatMember(chatId) &&
+          (
+            resource.data.senderId == request.auth.uid ||
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['readBy', 'deliveredTo', 'hiddenFor'])
+          );
+
+        allow delete: if false;
+      }
+    }
+  }
+}

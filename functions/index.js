@@ -94,6 +94,164 @@ exports.adminResetPasswordHttp = onRequest(async (req, res) => {
   }
 });
 
+// Kreira novi korisnički nalog (Auth + Firestore) preko Admin SDK-a, tako
+// da ostane server-side i NE menja Auth sesiju admina koji poziva (za
+// razliku od starog client-side _auth.createUserWithEmailAndPassword, koje
+// je automatski logovalo admina kao novokreiranog korisnika).
+exports.adminCreateUserHttp = onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+  if (req.method === "OPTIONS") {
+    res.status(204).send("");
+    return;
+  }
+
+  console.log("═══════════════════════════════════════");
+  console.log("📞 adminCreateUserHttp called");
+
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({error: "No token"});
+    }
+
+    const idToken = authHeader.split("Bearer ")[1];
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    const adminUid = decodedToken.uid;
+
+    const adminUserDoc = await admin.firestore()
+        .collection("users")
+        .doc(adminUid)
+        .get();
+
+    if (!adminUserDoc.exists || !adminUserDoc.data().isAdmin) {
+      console.log("❌ Not admin");
+      return res.status(403).json({error: "Not admin"});
+    }
+
+    const {name, email, password, city, phone, fruitTypes} = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({error: "Missing name, email or password"});
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({error: "Password must be 6+ chars"});
+    }
+
+    const safeFruitTypes = Array.isArray(fruitTypes) ? fruitTypes : [];
+
+    // Proveri jedinstvenost email-a (isto kao stari client-side kod)
+    const existing = await admin.firestore()
+        .collection("users")
+        .where("email", "==", email)
+        .limit(1)
+        .get();
+
+    if (!existing.empty) {
+      return res.status(200).json({success: false, notUniqueUsername: true});
+    }
+
+    let newUserId;
+    try {
+      const newAuthUser = await admin.auth().createUser({email, password});
+      newUserId = newAuthUser.uid;
+    } catch (e) {
+      console.error("❌ Auth createUser error:", e.message);
+      if (e.code === "auth/email-already-exists") {
+        return res.status(200).json({success: false, notUniqueUsername: true});
+      }
+      return res.status(500).json({error: e.message});
+    }
+
+    const chatId = newUserId.localeCompare(adminUid) < 0 ?
+      `chat_${newUserId}_${adminUid}` :
+      `chat_${adminUid}_${newUserId}`;
+
+    const db = admin.firestore();
+    const batch = db.batch();
+
+    batch.set(db.collection("users").doc(newUserId), {
+      email: email,
+      name: name,
+      isActive: false,
+      uid: newUserId,
+      city: city || "",
+      phone: phone || "",
+      isPasswordChangeNeeded: true,
+    });
+
+    for (const ft of safeFruitTypes) {
+      const userFruitTypeRef = db.collection("user_2_fruittypes").doc();
+      batch.set(userFruitTypeRef, {
+        userId: newUserId,
+        fruitId: ft.fruitTypeId,
+        numberOfTrees: ft.numberOfTrees,
+      });
+
+      const fruitTypeChatRef = db.collection("chats").doc(ft.fruitTypeId);
+      batch.update(fruitTypeChatRef, {
+        memberIds: admin.firestore.FieldValue.arrayUnion(newUserId),
+      });
+
+      const fruitTypeChatMemberRef = fruitTypeChatRef
+          .collection("members").doc(newUserId);
+      batch.set(fruitTypeChatMemberRef, {
+        userId: newUserId,
+        lastMessage: {
+          message: "-",
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          read: false,
+        },
+        memberSince: admin.firestore.FieldValue.serverTimestamp(),
+        messagesVisibleFrom: admin.firestore.FieldValue.serverTimestamp(),
+      }, {merge: true});
+    }
+
+    const privateChatRef = db.collection("chats").doc(chatId);
+    batch.set(privateChatRef, {
+      type: "private",
+      name: "Private chat",
+      lastMessage: {
+        text: "",
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        senderId: "",
+        readBy: {},
+      },
+      lastMessageTimestamp: admin.firestore.FieldValue.serverTimestamp(),
+      members: [],
+      memberIds: [newUserId, adminUid],
+    });
+
+    for (const memberId of [adminUid, newUserId]) {
+      const memberRef = privateChatRef.collection("members").doc(memberId);
+      batch.set(memberRef, {
+        userId: memberId,
+        lastMessage: {
+          message: "-",
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          read: false,
+        },
+        memberSince: admin.firestore.FieldValue.serverTimestamp(),
+        messagesVisibleFrom: admin.firestore.FieldValue.serverTimestamp(),
+      }, {merge: true});
+    }
+
+    await batch.commit();
+
+    console.log("✅ Created user:", newUserId);
+    console.log("═══════════════════════════════════════");
+
+    return res.status(200).json({success: true, userId: newUserId});
+  } catch (error) {
+    console.error("❌ Error:", error.message);
+    console.log("═══════════════════════════════════════");
+    return res.status(500).json({error: error.message});
+  }
+});
+
 exports.adminResetPassword = onCall(async (request) => {
     const data = request.data;
     const auth = request.auth;

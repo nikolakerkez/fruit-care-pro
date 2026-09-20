@@ -7,6 +7,7 @@ import 'package:fruit_care_pro/exceptions/login_exception.dart';
 import 'package:fruit_care_pro/exceptions/password_change_exception.dart';
 import 'package:fruit_care_pro/exceptions/wrong_password_exception.dart';
 import 'package:fruit_care_pro/models/create_user_result.dart';
+import 'package:fruit_care_pro/services/admin_service_http.dart';
 import 'package:fruit_care_pro/services/documents_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -316,163 +317,31 @@ Future<String?> getAdminId() async {
     throw GetAdminIdException('Neočekivana greška pri učitavanju admin podataka');
   }
 }
-  //Creates new user
-  //1. In firebebase auth system
-  //2. In database
-  //3. Add external data like fruit types
+  //Creates new user (Auth + Firestore) via Cloud Function, so the admin's
+  //own Auth session on this device is untouched by the operation.
   Future<CreateUserResult> createNewUser(CreateUserParam user) async {
     try {
-      var userSnapshot = await _db
-          .collection('users')
-          .where('email', isEqualTo: user.email)
-          .get();
+      final result = await AdminServiceHttp().createUser(
+        name: user.name,
+        email: user.email,
+        password: user.password,
+        city: user.city,
+        phone: user.phone,
+        fruitTypes: user.fruitTypes,
+      );
 
-      if (userSnapshot.docs.isNotEmpty) {
-        return CreateUserResult(isFailed: true, notUniqueUsername: true);
+      if (!result.success) {
+        return CreateUserResult(
+          isFailed: true,
+          notUniqueUsername: result.notUniqueUsername,
+        );
       }
-
-      String? adminId = await getAdminId();
-      if (adminId == null) {
-        return CreateUserResult(isFailed: true, notUniqueUsername: false);
-      }
-
-      UserCredential userCredential;
-      try {
-        userCredential = await _auth.createUserWithEmailAndPassword(
-            email: user.email, password: user.password);
-
-        if (userCredential.user == null) {
-          return CreateUserResult(isFailed: true, notUniqueUsername: true);
-        }
-      } on FirebaseAuthException catch (e) {
-        if (e.code == 'email-already-in-use') {
-          return CreateUserResult(isFailed: true, notUniqueUsername: true);
-        } else {
-          return CreateUserResult(isFailed: true, notUniqueUsername: false);
-        }
-      }
-
-      String userId = userCredential.user!.uid;
-      String chatId = await generateChatId(userId, adminId);
-
-      await _db.runTransaction((transaction) async {
-        //User reference
-        DocumentReference userRef =
-            _db.collection('users').doc(userCredential.user!.uid);
-        //Persist user
-        transaction.set(userRef, {
-          'email': user.email,
-          'name': user.name,
-          'isActive': false,
-          'uid': userCredential.user!.uid,
-          'city': user.city,
-          'phone': user.phone,
-          'isPasswordChangeNeeded': true
-        });
-
-        for (var ft in user.fruitTypes) {
-          //UserFruitType Assignment Reference
-          DocumentReference userFruitTypeRef =
-              _db.collection('user_2_fruittypes').doc();
-          //Persist new assignment
-          transaction.set(userFruitTypeRef, {
-            'userId': userCredential.user!.uid,
-            'fruitId': ft.fruitTypeId,
-            'numberOfTrees': ft.numberOfTrees
-          });
-
-          DocumentReference fruitTypeChatRef =
-              _db.collection('chats').doc(ft.fruitTypeId);
-          transaction.update(fruitTypeChatRef, {
-            'memberIds': FieldValue.arrayUnion([userId]),
-          });
-
-          DocumentReference fruitTypeChatUserMemberRef = _db
-              .collection('chats')
-              .doc(ft.fruitTypeId)
-              .collection('members')
-              .doc(userId);
-          transaction.set(
-              fruitTypeChatUserMemberRef,
-              {
-                'userId': userId,
-                'lastMessage': {
-                  'message': "-", // inicijalno prazno
-                  'timestamp': FieldValue.serverTimestamp(),
-                  'read': false, // inicijalno nije pročitao
-                },
-                'memberSince': FieldValue.serverTimestamp(),
-                'messagesVisibleFrom': FieldValue.serverTimestamp(),
-              },
-              SetOptions(merge: true));
-        }
-
-        //Add private chat
-        DocumentReference privateChatRef = _db.collection('chats').doc(chatId);
-        transaction.set(privateChatRef, {
-          'type': 'private',
-          'name': "Private chat",
-          'lastMessage': {
-            // ✅ MORA biti objekat, NE string!
-            'text': '',
-            'timestamp': FieldValue.serverTimestamp(),
-            'senderId': '',
-            'readBy': {},
-          },
-          'lastMessageTimestamp': FieldValue.serverTimestamp(),
-          'members': [],
-          'memberIds': [], // ✅ Dodaj članove!
-        });
-
-        transaction.update(privateChatRef, {
-          'memberIds': FieldValue.arrayUnion([userId, adminId]),
-        });
-
-        //Add admin member
-        DocumentReference adminChatMemberRef = _db
-            .collection('chats')
-            .doc(chatId)
-            .collection('members')
-            .doc(adminId);
-        transaction.set(
-            adminChatMemberRef,
-            {
-              'userId': adminId,
-              'lastMessage': {
-                'message': "-", // inicijalno prazno
-                'timestamp': FieldValue.serverTimestamp(),
-                'read': false, // inicijalno nije pročitao
-              },
-              'memberSince': FieldValue.serverTimestamp(),
-              'messagesVisibleFrom': FieldValue.serverTimestamp(),
-            },
-            SetOptions(merge: true));
-
-        //Add user member
-        DocumentReference userChatMemberRef = _db
-            .collection('chats')
-            .doc(chatId)
-            .collection('members')
-            .doc(userId);
-        transaction.set(
-            userChatMemberRef,
-            {
-              'userId': userId,
-              'lastMessage': {
-                'message': "-", // inicijalno prazno
-                'timestamp': FieldValue.serverTimestamp(),
-                'read': false, // inicijalno nije pročitao
-              },
-              'memberSince': FieldValue.serverTimestamp(),
-              'messagesVisibleFrom': FieldValue.serverTimestamp(),
-            },
-            SetOptions(merge: true));
-      });
 
       return CreateUserResult(
-          isFailed: false,
-          notUniqueUsername: false,
-          id: userCredential.user!.uid);
+        isFailed: false,
+        notUniqueUsername: false,
+        id: result.userId,
+      );
     } catch (e) {
       return CreateUserResult(isFailed: true, notUniqueUsername: false);
     }
@@ -818,16 +687,5 @@ Future<String?> getAdminId() async {
 
     // 7. Obriši Firebase Auth nalog (mora biti poslednje)
     await user.delete();
-  }
-
-  Future<String> generateChatId(String user1Id, String user2Id) async {
-    String generatedChatId = '';
-    if (user1Id.compareTo(user2Id) < 0) {
-      generatedChatId = 'chat_${user1Id}_$user2Id';
-    } else {
-      generatedChatId = 'chat_${user2Id}_$user1Id';
-    }
-
-    return generatedChatId;
   }
 }

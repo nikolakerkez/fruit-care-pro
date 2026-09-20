@@ -1188,7 +1188,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen>
                   children: [
                     Expanded(
                       child: generateTextField(
-                        labelText: isPremium ? 'Unesite poruku' : 'Niste premium korisnik',
+                        labelText: isPremium ? 'Unesite poruku' : 'Konsultacije nisu aktivne za vaš nalog',
                         controller: _messageController,
                       ),
                     ),

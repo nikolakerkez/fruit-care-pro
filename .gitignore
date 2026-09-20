@@ -33,6 +33,7 @@ android/*.keystore
 google-services.json
 GoogleService-Info.plist
 firebase_options.dart
+.firebase/
 
 # Functions
 functions/node_modules/

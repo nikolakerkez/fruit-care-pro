@@ -596,7 +596,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                       ),
                       const SizedBox(width: 8),
                       _statusBadge(
-                        appUser.isPremium ? 'Premium' : 'Standard',
+                        appUser.isPremium ? 'Konsultacije aktivne' : 'Konsultacije neaktivne',
                         appUser.isPremium
                             ? const Color(0xFFFFB300)
                             : Colors.grey[400]!,
