@@ -7,13 +7,18 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // exists() guards keep these from erroring when the referenced doc is
+    // missing (e.g. a user doc already deleted mid-flow, or a chat that is
+    // being created in the same transaction).
     function isAdmin() {
       return isSignedIn() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isAdmin', false) == true;
     }
 
     function isChatMember(chatId) {
       return isSignedIn() &&
+        exists(/databases/$(database)/documents/chats/$(chatId)) &&
         request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds;
     }
 
@@ -50,11 +55,13 @@ service cloud.firestore {
     }
 
     // ── user_2_fruittypes (which users grow which fruit types) ─────────
-    // Assignment is admin-managed only (the UI already disables this for
-    // regular users; this closes the same gap server-side).
+    // Assignment is admin-managed. A user may only remove their own links
+    // (part of the in-app "delete account" flow).
     match /user_2_fruittypes/{assocId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin() ||
+        (isSignedIn() && resource.data.userId == request.auth.uid);
     }
 
     // ── advertisements & categories ─────────────────────────────────────
@@ -70,26 +77,44 @@ service cloud.firestore {
 
     // ── chats ────────────────────────────────────────────────────────────
     match /chats/{chatId} {
-      allow read: if isSignedIn() && request.auth.uid in resource.data.memberIds;
+      // resource == null lets a transaction check whether a chat exists
+      // (e.g. admin editing/deleting a fruit type that has no chat yet).
+      allow read: if isSignedIn() &&
+        (resource == null || request.auth.uid in resource.data.memberIds);
 
       // Starting a new chat: you must include yourself as a member.
       allow create: if isSignedIn() && request.auth.uid in request.resource.data.memberIds;
 
-      // Any member can update chat metadata (lastMessage, typing, etc.),
-      // but only admin can change who belongs to the chat.
-      allow update: if isSignedIn() && request.auth.uid in resource.data.memberIds &&
+      // Any member can update chat metadata (lastMessage, typing, etc.).
+      // Membership itself is admin-managed; a member may only remove
+      // themselves (delete-account flow).
+      allow update: if isAdmin() ||
         (
-          request.resource.data.memberIds == resource.data.memberIds ||
-          isAdmin()
+          isSignedIn() && request.auth.uid in resource.data.memberIds &&
+          (
+            request.resource.data.memberIds == resource.data.memberIds ||
+            request.resource.data.memberIds.toSet() ==
+              resource.data.memberIds.toSet().difference([request.auth.uid].toSet())
+          )
         );
 
-      allow delete: if isAdmin();
+      // Admin can delete any chat (deleting a fruit type). A member can
+      // delete their own private (non-group) chat (delete-account flow).
+      allow delete: if isAdmin() ||
+        (
+          isSignedIn() && request.auth.uid in resource.data.memberIds &&
+          resource.data.get('type', '') != 'group' &&
+          resource.data.get('isGroup', false) != true
+        );
 
       match /members/{memberId} {
         // Sending a message fans out lastMessage/unreadCount updates to
         // every member doc in the chat, so any member needs access to all
-        // member subdocuments here, not just their own.
-        allow read, write: if isChatMember(chatId);
+        // member subdocuments here, not just their own. Admin is allowed
+        // explicitly so creating a fruit type can create the chat and its
+        // first member doc in one transaction (the chat does not exist yet
+        // when the rule is evaluated).
+        allow read, write: if isAdmin() || isChatMember(chatId);
       }
 
       match /messages/{messageId} {
