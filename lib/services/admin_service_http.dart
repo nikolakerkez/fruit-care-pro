@@ -91,6 +91,44 @@ class AdminServiceHttp {
     }
   }
 
+  /// Deletes the currently signed-in user's own account (Firestore data,
+  /// private chat with messages, Storage images, and the Auth account) via
+  /// Cloud Function. Caller is expected to have re-authenticated already.
+  Future<void> deleteMyAccount() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+
+    if (currentUser == null) {
+      throw Exception('Niste prijavljeni');
+    }
+
+    final idToken = await currentUser.getIdToken(true);
+
+    final client = HttpClient();
+    try {
+      final request = await client
+          .postUrl(Uri.parse('$_baseUrl/deleteMyAccountHttp'))
+          .timeout(const Duration(seconds: 30));
+
+      request.headers.set('Content-Type', 'application/json');
+      request.headers.set('Authorization', 'Bearer $idToken');
+      request.write('{}');
+
+      final response =
+          await request.close().timeout(const Duration(seconds: 120));
+      final responseBody = await response.transform(utf8.decoder).join();
+
+      if (response.statusCode != 200) {
+        String message = 'HTTP ${response.statusCode}';
+        try {
+          message = jsonDecode(responseBody)['error'] ?? message;
+        } catch (_) {}
+        throw Exception(message);
+      }
+    } finally {
+      client.close();
+    }
+  }
+
   /// Reset user password using direct HTTP call
   Future<void> resetUserPassword({
     required String userId,

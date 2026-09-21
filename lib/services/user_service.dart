@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:fruit_care_pro/exceptions/get_admin_id_exception.dart';
 import 'package:fruit_care_pro/exceptions/get_all_users_exception.dart';
@@ -625,67 +624,15 @@ Future<String?> getAdminId() async {
     );
     await user.reauthenticateWithCredential(credential);
 
-    final userId = user.uid;
-
-    // 2. Obriši FCM token
+    // 2. Obriši FCM token (dok je nalog još aktivan)
     await NotificationService.clearToken();
 
-    // 3. Dohvati putanje slika iz Firestore-a
-    final userDoc = await _db.collection('users').doc(userId).get();
-    final userData = userDoc.data();
-    if (userData != null) {
-      final imagePath = userData['imagePath'] as String?;
-      final thumbPath = userData['thumbPath'] as String?;
-      if (imagePath != null) {
-        try { await FirebaseStorage.instance.ref(imagePath).delete(); } catch (_) {}
-      }
-      if (thumbPath != null) {
-        try { await FirebaseStorage.instance.ref(thumbPath).delete(); } catch (_) {}
-      }
-    }
+    // 3. Server briše sve podatke i Auth nalog (Cloud Function)
+    await AdminServiceHttp().deleteMyAccount();
 
-    // 4. Dohvati sve user_2_fruittypes veze
-    final userFruitSnap = await _db
-        .collection('user_2_fruittypes')
-        .where('userId', isEqualTo: userId)
-        .get();
-
-    // 5. Batch brisanje: user_2_fruittypes, uklanjanje iz group chat-ova, Firestore profil
-    final batch = _db.batch();
-
-    for (final doc in userFruitSnap.docs) {
-      batch.delete(doc.reference);
-
-      final fruitTypeId = doc.data()['fruitId'] as String?;
-      if (fruitTypeId != null) {
-        batch.update(
-          _db.collection('chats').doc(fruitTypeId),
-          {'memberIds': FieldValue.arrayRemove([userId])},
-        );
-        batch.delete(
-          _db.collection('chats').doc(fruitTypeId).collection('members').doc(userId),
-        );
-      }
-    }
-
-    batch.delete(_db.collection('users').doc(userId));
-    await batch.commit();
-
-    // 6. Obriši privatne chatove (group chatovi su već obrađeni iznad)
-    final privateChatsSnap = await _db
-        .collection('chats')
-        .where('memberIds', arrayContains: userId)
-        .get();
-
-    for (final doc in privateChatsSnap.docs) {
-      final data = doc.data();
-      final isGroup = data['type'] == 'group' || data['isGroup'] == true;
-      if (!isGroup) {
-        await doc.reference.delete();
-      }
-    }
-
-    // 7. Obriši Firebase Auth nalog (mora biti poslednje)
-    await user.delete();
+    // 4. Nalog više ne postoji na serveru - očisti lokalnu sesiju
+    try {
+      await _auth.signOut();
+    } catch (_) {}
   }
 }

@@ -149,6 +149,17 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
           );
         }
         break;
+      case 4:
+        // Admin gledajući tuđ profil (otvoren iz liste Korisnici) → vrati na svoj.
+        // Bez activeBottomNavIndex je ovo već admin-ov profil, pa nema šta da se radi.
+        if (currentUser.isAdmin && widget.activeBottomNavIndex != null) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+                builder: (context) => UserDetailsScreen(userId: currentUser.id)),
+          );
+        }
+        break;
     }
   }
   // 🗑️ Delete account dialog

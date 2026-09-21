@@ -252,6 +252,120 @@ exports.adminCreateUserHttp = onRequest(async (req, res) => {
   }
 });
 
+// Korisnik briše SOPSTVENI nalog. Server-side (Admin SDK) da se rekurzivno
+// obrišu privatni chat sa svim porukama i slikama iz Storage-a, što klijent
+// ne može (Firestore ne briše podkolekcije automatski). Klijent pre poziva
+// radi re-autentifikaciju lozinkom.
+exports.deleteMyAccountHttp = onRequest({timeoutSeconds: 300}, async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+  if (req.method === "OPTIONS") {
+    res.status(204).send("");
+    return;
+  }
+
+  if (req.method !== "POST") {
+    return res.status(405).json({error: "Method not allowed"});
+  }
+
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({error: "No token"});
+    }
+
+    const decodedToken = await admin.auth()
+        .verifyIdToken(authHeader.split("Bearer ")[1]);
+    const uid = decodedToken.uid;
+
+    const db = admin.firestore();
+    const userRef = db.collection("users").doc(uid);
+    const userSnap = await userRef.get();
+
+    if (userSnap.exists && userSnap.data().isAdmin) {
+      return res.status(403).json({error: "Admin account cannot be deleted"});
+    }
+
+    const bucket = admin.storage().bucket();
+    const deleteFile = async (path) => {
+      if (!path) return;
+      try {
+        await bucket.file(path).delete({ignoreNotFound: true});
+      } catch (e) {
+        console.warn("⚠️ Storage delete failed:", path, e.message);
+      }
+    };
+
+    const removeFromGroupChat = async (chatRef) => {
+      await chatRef.update({
+        memberIds: admin.firestore.FieldValue.arrayRemove(uid),
+      });
+      await chatRef.collection("members").doc(uid).delete();
+    };
+
+    // 1. Profilne slike
+    if (userSnap.exists) {
+      await deleteFile(userSnap.data().imagePath);
+      await deleteFile(userSnap.data().thumbPath);
+    }
+
+    // 2. Chatovi: grupni → samo ukloni korisnika; privatni → obriši ceo chat
+    //    (poruke + slike)
+    const chats = await db.collection("chats")
+        .where("memberIds", "array-contains", uid)
+        .get();
+
+    for (const chatDoc of chats.docs) {
+      const data = chatDoc.data();
+      const isGroup = data.type === "group" || data.isGroup === true;
+
+      if (isGroup) {
+        await removeFromGroupChat(chatDoc.ref);
+      } else {
+        const messages = await chatDoc.ref.collection("messages").get();
+        await Promise.all(messages.docs.flatMap((m) => [
+          deleteFile(m.data().imagePath),
+          deleteFile(m.data().thumbPath),
+        ]));
+        await db.recursiveDelete(chatDoc.ref);
+      }
+    }
+
+    // 3. Veze sa voćnim vrstama (+ grupni chat, ako memberIds nije bio u sinhronizaciji)
+    const links = await db.collection("user_2_fruittypes")
+        .where("userId", "==", uid)
+        .get();
+
+    for (const link of links.docs) {
+      const fruitId = link.data().fruitId;
+      if (fruitId) {
+        const groupChatRef = db.collection("chats").doc(fruitId);
+        if ((await groupChatRef.get()).exists) {
+          await removeFromGroupChat(groupChatRef);
+        }
+      }
+      await link.ref.delete();
+    }
+
+    // 4. Profil i Auth nalog
+    await userRef.delete();
+
+    try {
+      await admin.auth().deleteUser(uid);
+    } catch (e) {
+      if (e.code !== "auth/user-not-found") throw e;
+    }
+
+    console.log("✅ Deleted account:", uid);
+    return res.status(200).json({success: true});
+  } catch (error) {
+    console.error("❌ deleteMyAccountHttp error:", error.message);
+    return res.status(500).json({error: error.message});
+  }
+});
+
 exports.adminResetPassword = onCall(async (request) => {
     const data = request.data;
     const auth = request.auth;
